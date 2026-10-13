@@ -48,10 +48,27 @@ def tune_laptime() -> None:
     tune(a.track, a.generations, a.hidden, a.sigma, a.popsize, a.workers, a.seed)
 
 
+def train_ppo() -> None:
+    ap = argparse.ArgumentParser(prog="train-ppo", description="PPO with a reward that pays for daring")
+    ap.add_argument("--track", default="spielberg", choices=fevo.track_ids())
+    ap.add_argument("--steps", type=float, default=50e6, help="total environment steps")
+    ap.add_argument("-w", "--workers", type=int)
+    ap.add_argument("--envs-per-worker", type=int, default=16)
+    ap.add_argument("--daring", type=float, default=1.0, help="progress multiplier per unit of grip usage squared")
+    ap.add_argument("--commit", type=float, default=0.5, help="progress multiplier per unit of speed / reference")
+    ap.add_argument("--crash", type=float, default=-20.0)
+    ap.add_argument("--fresh", action="store_true")
+    ap.add_argument("--seed", type=int, default=1)
+    a = ap.parse_args()
+    from .ppo import Daring, train
+
+    train(a.track, int(a.steps), a.workers, a.envs_per_worker, Daring(daring=a.daring, commit=a.commit, crash=a.crash), a.seed, not a.fresh)
+
+
 def _winner(track: str, path: str | None) -> Path:
     if path:
         return Path(path)
-    for mode in ("tuned", "laptime", "curriculum"):
+    for mode in ("ppo", "tuned", "laptime", "curriculum"):
         p = winner_path(mode, track)
         if p.is_file():
             return p
