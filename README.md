@@ -23,6 +23,14 @@ uv run train-curriculum --track monza --fresh
 uv run train-laptime
 ```
 
+**Tuning** (CMA-ES on the champion's weights; the result is still a NEAT genome). Adds a few hidden tanh nodes with zero output weights, then moves every weight together. Much better than NEAT at fine-tuning a car that already laps:
+
+```bash
+uv run tune-laptime                          # continues from winners/tuned-<track>.json if present
+```
+
+`src/fevoracer/analysis.py` computes a reference lap (the fastest this car could go round the centre line) and the time lost gate by gate.
+
 ## Check, export, watch
 
 ```bash
@@ -37,3 +45,5 @@ Champions are written to `winners/` (JSON upload files plus neat-python pickles)
 
 - Every node uses `tanh`. When the throttle output was allowed to mutate to `sigmoid` (which can't go negative) the car could never brake and evolution settled on coasting round at 1% throttle.
 - Each curriculum stage has a time budget just above its pace target (60% of the speed limit), so crawling round doesn't pay.
+- NEAT lap mode stalls quickly: each mutation nudges one weight at random and almost every faster variant crashes somewhere. CMA-ES tuning took Spielberg from 1:38.03 to 1:31.02 in 14 minutes; later rounds plateaued.
+- The car still brakes lightly over long distances instead of late and hard, and is slowest relative to the reference in fast corners.

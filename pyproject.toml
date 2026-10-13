@@ -5,13 +5,16 @@ description = "fevo-racer1: NEAT agents that learn real F1 circuits on the fevo 
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "cma>=4.5.0",
     "fevo",
     "neat-python>=2.0.0",
+    "numpy>=2.4.6",
 ]
 
 [project.scripts]
 train-curriculum = "fevoracer.cli:train_curriculum"
 train-laptime = "fevoracer.cli:train_laptime"
+tune-laptime = "fevoracer.cli:tune_laptime"
 benchmark-lap = "fevoracer.cli:benchmark"
 export-winner = "fevoracer.cli:export"
 replay = "fevoracer.cli:replay"

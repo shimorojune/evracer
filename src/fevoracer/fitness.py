@@ -87,14 +87,53 @@ def time_budget(length_m: float, limit: float | None) -> int:
     return min(CURRICULUM_MAX_STEPS, int(1.15 * 60 * length_m / (PACE * limit)))
 
 
+#: At-speed practice for lap-time mode: short runs from points spread round
+#: the lap, entered at 80% of the reference speed there, scored by metres
+#: covered. Rewards carrying speed through each corner without risking the
+#: whole lap on it.
+PRACTICE_POINTS = 16
+PRACTICE_STEPS = 6 * 60
+#: Each practice point is entered at both speeds: at 80% the car learns to
+#: carry speed, at 100% it has to brake hard and late to survive.
+PRACTICE_ENTRIES = (0.8, 1.0)
+PRACTICE_WEIGHT = 3.0
+
+_REF: dict[str, list[float]] = {}
+
+
+def _reference_speeds(track: fevo.Track) -> list[float]:
+    if track.id not in _REF:
+        from .analysis import reference_lap
+
+        _REF[track.id] = reference_lap(track).speed
+    return _REF[track.id]
+
+
 def _laptime(sim: fevo.Simulator, program: fevo.Program, track: fevo.Track) -> tuple[float, dict[str, Any]]:
-    """The official three laps; every step saved is worth one point per lap."""
+    """The official three laps (every step saved is worth a point per lap), plus at-speed practice."""
     result = fevo.evaluate(program, track, sim=sim)
     fitness = 0.0
     for lap in result.laps:
         fitness += 100.0 * lap.gates_passed
         if lap.finished:
             fitness += 30000.0 - lap.steps
+
+    ref = _reference_speeds(track)
+    n = track.points
+    sim.configure(fevo.Practice(max_steps=PRACTICE_STEPS))
+    practice_m = 0.0
+    for k in range(PRACTICE_POINTS):
+        start = (k * n) // PRACTICE_POINTS + n // (2 * PRACTICE_POINTS)
+        for entry in PRACTICE_ENTRIES:
+            sim.reset(1, point=start, speed=entry * ref[start])
+            status = sim.run_agent_lap()
+            metres = ((sim.progress_index - start) % n) * track.raw["spacingM"]
+            if metres > n / 2:  # went backwards
+                metres = 0.0
+            practice_m += (metres if status in ("timed-out", "finished") else 0.5 * metres) / len(PRACTICE_ENTRIES)
+    fitness += PRACTICE_WEIGHT * practice_m
+    sim.configure()
+
     finished = [l for l in result.laps if l.finished]
     info = {
         "coverage": min(l.gates_passed for l in result.laps) / len(track.gates),
@@ -102,5 +141,6 @@ def _laptime(sim: fevo.Simulator, program: fevo.Program, track: fevo.Track) -> t
         "laps_finished": len(finished),
         "median_steps": result.median_steps,
         "statuses": [l.status for l in result.laps],
+        "practice_m": practice_m,
     }
     return fitness, info

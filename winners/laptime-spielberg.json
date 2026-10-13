@@ -24,7 +24,7 @@
   {
    "id": 0,
    "type": "output",
-   "bias": 0.8942897670960629,
+   "bias": 1.2240964050697725,
    "response": 1.0,
    "activation": "tanh",
    "aggregation": "sum"
@@ -32,7 +32,15 @@
   {
    "id": 1,
    "type": "output",
-   "bias": 0.06587728060143833,
+   "bias": 0.1717615672180644,
+   "response": 1.0,
+   "activation": "tanh",
+   "aggregation": "sum"
+  },
+  {
+   "id": 3255,
+   "type": "hidden",
+   "bias": -0.1426385416102509,
    "response": 1.0,
    "activation": "tanh",
    "aggregation": "sum"
@@ -42,163 +50,157 @@
   {
    "in": -1,
    "out": 0,
-   "weight": -4.214566952667605,
-   "enabled": false
-  },
-  {
-   "in": -1,
-   "out": 1,
-   "weight": -0.7313373178742638,
+   "weight": -4.5104141902372685,
    "enabled": false
   },
   {
    "in": -2,
    "out": 0,
-   "weight": 3.345104221259766,
+   "weight": 2.586678754768603,
    "enabled": false
   },
   {
    "in": -2,
    "out": 1,
-   "weight": 4.383054667064548,
-   "enabled": true
+   "weight": 4.722469781816814,
+   "enabled": false
   },
   {
    "in": -3,
    "out": 0,
-   "weight": 0.5319226338563443,
+   "weight": 0.3099280688015057,
    "enabled": false
   },
   {
    "in": -3,
    "out": 1,
-   "weight": 1.2949399888731599,
+   "weight": 1.8634527303676383,
    "enabled": false
   },
   {
    "in": -4,
    "out": 0,
-   "weight": 1.3820273164251826,
+   "weight": 1.6194954245728055,
    "enabled": false
   },
   {
    "in": -4,
    "out": 1,
-   "weight": -3.7083235612355656,
+   "weight": -3.838559860340303,
    "enabled": false
   },
   {
    "in": -5,
    "out": 0,
-   "weight": -10.161535080694872,
+   "weight": -10.258441917248295,
    "enabled": true
   },
   {
    "in": -5,
    "out": 1,
-   "weight": -2.8703385337680207,
+   "weight": -2.78544927090829,
    "enabled": false
   },
   {
    "in": -6,
    "out": 0,
-   "weight": -1.81642364464788,
+   "weight": -1.7714203411926772,
    "enabled": false
   },
   {
    "in": -7,
    "out": 0,
-   "weight": 0.2550609247056002,
+   "weight": 0.5987226668350952,
    "enabled": false
   },
   {
    "in": -7,
    "out": 1,
-   "weight": 0.5460153954044769,
+   "weight": 0.6817268684343021,
    "enabled": false
   },
   {
    "in": -8,
    "out": 0,
-   "weight": 4.123034793132718,
+   "weight": 4.1430883450476585,
    "enabled": false
   },
   {
    "in": -9,
    "out": 0,
-   "weight": 4.3511688680161615,
-   "enabled": false
-  },
-  {
-   "in": -9,
-   "out": 1,
-   "weight": 0.3415923985384587,
+   "weight": 4.4867223288570806,
    "enabled": false
   },
   {
    "in": -10,
    "out": 0,
-   "weight": 0.9246431875030791,
+   "weight": 0.858493610764749,
    "enabled": false
   },
   {
    "in": -10,
    "out": 1,
-   "weight": -2.014867777928426,
-   "enabled": false
-  },
-  {
-   "in": -11,
-   "out": 0,
-   "weight": 4.447325399202801,
+   "weight": -2.4054674996700434,
    "enabled": false
   },
   {
    "in": -11,
    "out": 1,
-   "weight": 1.0812690992116725,
-   "enabled": false
-  },
-  {
-   "in": -13,
-   "out": 0,
-   "weight": -1.2719063686872039,
+   "weight": 0.980496958841188,
    "enabled": false
   },
   {
    "in": -14,
    "out": 0,
-   "weight": -0.9441413097852399,
+   "weight": -1.0316453614914394,
    "enabled": false
   },
   {
    "in": -14,
    "out": 1,
-   "weight": 0.5155470920525191,
+   "weight": 0.24685946778328594,
    "enabled": false
   },
   {
    "in": -15,
    "out": 0,
-   "weight": -1.3253994095903716,
+   "weight": -1.0536486125621363,
    "enabled": false
   },
   {
    "in": -15,
    "out": 1,
-   "weight": -0.6199664079873496,
+   "weight": -0.7428182592616458,
+   "enabled": false
+  },
+  {
+   "in": -11,
+   "out": 0,
+   "weight": -0.14724143592556502,
+   "enabled": false
+  },
+  {
+   "in": -4,
+   "out": 3255,
+   "weight": 1.6066004755640162,
+   "enabled": true
+  },
+  {
+   "in": 3255,
+   "out": 0,
+   "weight": 1.5300213381585965,
    "enabled": true
   },
   {
    "in": -6,
    "out": 1,
-   "weight": 5.111488111054889,
+   "weight": 5.086532343562455,
    "enabled": true
   },
   {
    "in": -12,
    "out": 1,
-   "weight": -3.853544416468334,
+   "weight": -3.9364468128003667,
    "enabled": true
   }
  ]

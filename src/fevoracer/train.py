@@ -80,7 +80,8 @@ class Trainer:
                 extra += f"  lap {fevo.format_lap_time(info['steps'])} ({avg:.0f} km/h avg)"
         else:
             med = info.get("median_steps")
-            extra = f"laps finished {info['laps_finished']}/3  median {fevo.format_lap_time(med) if med else '—':>8}  {','.join(info['statuses'])}"
+            extra = (f"laps finished {info['laps_finished']}/3  median {fevo.format_lap_time(med) if med else '—':>8}  "
+                     f"practice {info.get('practice_m', 0):6.0f} m  {','.join(info['statuses'])}")
         print(f"gen {self.generation:4d}  {mins:6.1f} min  best {fit:10.1f}  {extra}", flush=True)
 
     def save_champion(self, genome: Any, config: neat.Config, info: dict[str, Any], stage: bool = False) -> None:

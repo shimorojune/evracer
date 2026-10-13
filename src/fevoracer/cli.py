@@ -33,10 +33,25 @@ def train_laptime() -> None:
     _train("laptime")
 
 
+def tune_laptime() -> None:
+    ap = argparse.ArgumentParser(prog="tune-laptime", description="CMA-ES weight tuning of the lap-time champion")
+    ap.add_argument("--track", default="spielberg", choices=fevo.track_ids())
+    ap.add_argument("-g", "--generations", type=int, default=300)
+    ap.add_argument("--hidden", type=int, default=6, help="hidden tanh nodes to add")
+    ap.add_argument("--sigma", type=float, default=0.05)
+    ap.add_argument("--popsize", type=int)
+    ap.add_argument("-w", "--workers", type=int)
+    ap.add_argument("--seed", type=int, default=1)
+    a = ap.parse_args()
+    from .tune import tune
+
+    tune(a.track, a.generations, a.hidden, a.sigma, a.popsize, a.workers, a.seed)
+
+
 def _winner(track: str, path: str | None) -> Path:
     if path:
         return Path(path)
-    for mode in ("laptime", "curriculum"):
+    for mode in ("tuned", "laptime", "curriculum"):
         p = winner_path(mode, track)
         if p.is_file():
             return p
