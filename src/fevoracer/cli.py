@@ -77,10 +77,21 @@ def warm_start() -> None:
     run(a.track, a.rounds, a.grip_margin, a.seed)
 
 
+def practice() -> None:
+    ap = argparse.ArgumentParser(prog="practice", description="Practice session: find the best car setup with the setup-aware PPO driver")
+    ap.add_argument("--track", default="spielberg", choices=fevo.track_ids())
+    ap.add_argument("--runs", type=int, default=200, help="setups to try")
+    ap.add_argument("--seed", type=int, default=1)
+    a = ap.parse_args()
+    from .practice import practice as run
+
+    run(a.track, a.runs, a.seed)
+
+
 def _winner(track: str, path: str | None) -> Path:
     if path:
         return Path(path)
-    for mode in ("ppo", "warmstart", "tuned", "laptime", "curriculum"):
+    for mode in ("practice", "ppo", "warmstart", "tuned", "laptime", "curriculum"):
         p = winner_path(mode, track)
         if p.is_file():
             return p

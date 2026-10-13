@@ -75,6 +75,31 @@ def stage_passed(result: fevo.OfficialResult, length_m: float, limit: float | No
     return length_m / (max(l.steps for l in result.laps) / 60) >= PACE * limit
 
 
+# --------------------------------------------------------------------------- setups
+
+KNOBS = fevo.load_rules().setup
+N_SETUP = len(KNOBS)
+OBS_DIM = 15 + N_SETUP
+
+
+def setup_norm(values: list[float]) -> list[float]:
+    """Setup values scaled to about -1..1 around the default, as the network sees them."""
+    return [(v - k["default"]) / ((k["max"] - k["min"]) / 2) for v, k in zip(values, KNOBS)]
+
+
+def setup_from_norm(x: list[float]) -> list[float]:
+    """Inverse of setup_norm, clipped to the legal ranges."""
+    return [min(k["max"], max(k["min"], k["default"] + v * (k["max"] - k["min"]) / 2)) for v, k in zip(x, KNOBS)]
+
+
+def default_setup() -> list[float]:
+    return [float(k["default"]) for k in KNOBS]
+
+
+def setup_dict(values: list[float]) -> dict[str, float]:
+    return {k["id"]: round(float(v), 4) for k, v in zip(KNOBS, values)}
+
+
 # --------------------------------------------------------------------------- environments
 
 
@@ -103,6 +128,14 @@ class RaceEnv:
         self.speed_limit: float | None = None
         #: Trouble spots (centre-line indices where training crashes most), sent by the trainer.
         self.hot: list[int] = []
+        #: Practice setups: each episode drives a random legal setup (a quarter of them the default),
+        #: and the network sees the setup as extra inputs, so it learns to drive any of them.
+        self.random_setups = True
+        #: How far from the default setups may go (0 = always default, 1 = the whole legal range).
+        #: The trainer widens it while the driver keeps finishing laps.
+        self.spread = 0.0
+        self.setup = default_setup()
+        self.snorm = setup_norm(self.setup)
 
     def set_limit(self, limit: float | None) -> None:
         """Curriculum stage: practice speed limit (None = the real car) and the matching lap time budget."""
@@ -115,11 +148,23 @@ class RaceEnv:
         return r if self.speed_limit is None else min(r, self.speed_limit)
 
     def grip_g(self, v: float) -> float:
-        c = self.car
+        c = self.car  # the current setup's car
         df = 0.5 * c["airDensityKgM3"] * c["downforceAreaM2"] * v * v
         return 0.5 * (c["tyreMuFront"] + c["tyreMuRear"]) * (1 + df / (c["massKg"] * c["gravityMps2"]))
 
     def reset(self) -> list[float]:
+        if self.random_setups:
+            if self.rng.random() < 0.25 or self.spread <= 0:
+                self.setup = default_setup()
+            else:
+                # Within the current spread of the default, rounded to the hundredth like a real setup sheet.
+                self.setup = [
+                    round(min(k["max"], max(k["min"], k["default"] + self.rng.uniform(-1, 1) * self.spread * (k["max"] - k["min"]) / 2)), 2)
+                    for k in KNOBS
+                ]
+            self.snorm = setup_norm(self.setup)
+            self.sim.set_setup(self.setup)
+            self.car = self.rules.car_for(self.setup)
         self.official = self.rng.random() < self.official_p
         if self.official:
             self.sim.configure(fevo.Practice(speed_limit=self.speed_limit, max_steps=self.lap_limit))
@@ -136,13 +181,13 @@ class RaceEnv:
             obs = self.sim.reset(1, point=p, lateral_m=self.rng.uniform(-2, 2), heading_rad=self.rng.uniform(-0.05, 0.05), speed=v)
         self.idx = self.sim.progress_index
         self.t = 0
-        self.obs = obs
-        return obs
+        self.obs = obs + self.snorm
+        return self.obs
 
     def step(self, steer: float, throttle: float) -> tuple[list[float], float, bool, dict[str, Any]]:
         code, vals = self.sim.step_fast(steer, throttle)
         status = fevo.sim.STATUS[code]
-        obs = list(vals[:15])
+        obs = list(vals[:15]) + self.snorm
         vx, _vy, yaw_rate, idx = vals[15], vals[16], vals[17], int(vals[18])
         steps = int(vals[20])
         d = self.d
@@ -176,6 +221,11 @@ def _worker(conn: Any, track: str, daring: dict[str, float], k: int, seed: int, 
         msg = conn.recv()
         if msg is None:
             break
+        if isinstance(msg, tuple) and msg[0] == "spread":
+            for e in envs:
+                e.spread = msg[1]
+            conn.send(True)
+            continue
         if isinstance(msg, tuple) and msg[0] == "hot":
             for e in envs:
                 e.hot = msg[1]
@@ -224,6 +274,12 @@ class VecEnv:
         self.ends = [e for r in res for e in r[4]]
         return self.obs, np.concatenate([r[1] for r in res]), np.concatenate([r[2] for r in res]), laps
 
+    def set_spread(self, spread: float) -> None:
+        for c in self.conns:
+            c.send(("spread", spread))
+        for c in self.conns:
+            c.recv()
+
     def set_hot(self, points: list[int]) -> None:
         for c in self.conns:
             c.send(("hot", points))
@@ -249,10 +305,11 @@ class VecEnv:
 class Policy(nn.Module):
     """Mean action = MLP(obs) with tanh hidden layers and a linear output: uploads as an MLP."""
 
-    def __init__(self, hidden: int = 64) -> None:
+    def __init__(self, hidden: int = 64, in_dim: int = OBS_DIM) -> None:
         super().__init__()
-        self.pi = nn.Sequential(nn.Linear(15, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, 2))
-        self.v = nn.Sequential(nn.Linear(15, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, 1))
+        self.in_dim = in_dim
+        self.pi = nn.Sequential(nn.Linear(in_dim, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, 2))
+        self.v = nn.Sequential(nn.Linear(in_dim, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, 1))
         self.log_std = nn.Parameter(torch.full((2,), -0.5))
         for m in self.pi:
             if isinstance(m, nn.Linear):
@@ -264,16 +321,39 @@ class Policy(nn.Module):
         # A floor on exploration noise: without it the noise collapsed and training fell apart.
         return torch.distributions.Normal(self.pi(obs), self.log_std.clamp(min=-3.0).exp())
 
-    def to_mlp(self) -> dict[str, Any]:
-        """The policy's mean as a fevo MLP upload file (deterministic driving)."""
+    def to_mlp(self, setup: list[float] | None = None) -> dict[str, Any]:
+        """The policy's mean as a fevo MLP upload file for one setup.
+
+        The setup inputs are constant for a whole run, so they're folded into
+        the first layer's biases: the file is a plain 15-input network plus
+        the "setup" block, and drives exactly as the setup-aware network."""
+        setup = setup or default_setup()
         layers = [m for m in self.pi if isinstance(m, nn.Linear)]
+        w0 = layers[0].weight.detach().double()
+        b0 = layers[0].bias.detach().double()
+        if self.in_dim > 15:
+            b0 = b0 + w0[:, 15:] @ torch.tensor(setup_norm(setup), dtype=torch.float64)
+            w0 = w0[:, :15]
+        weights = [w0.flatten().tolist()] + [m.weight.detach().double().flatten().tolist() for m in layers[1:]]
+        biases = [b0.tolist()] + [m.bias.detach().double().tolist() for m in layers[1:]]
         return {
             "layers": [15] + [m.out_features for m in layers],
             "activation": "tanh",
             "outputActivation": "identity",
-            "weights": [m.weight.detach().double().flatten().tolist() for m in layers],
-            "biases": [m.bias.detach().double().tolist() for m in layers],
+            "weights": weights,
+            "biases": biases,
+            "setup": setup_dict(setup),
         }
+
+    def load_compatible(self, state: dict[str, Any]) -> None:
+        """Load a checkpoint, widening a 15-input network to also take setup inputs (new weights start at zero)."""
+        own = self.state_dict()
+        for key, val in state.items():
+            if key in own and own[key].shape != val.shape and val.dim() == 2 and val.shape[0] == own[key].shape[0]:
+                widened = torch.zeros_like(own[key])
+                widened[:, : val.shape[1]] = val
+                state[key] = widened
+        self.load_state_dict(state)
 
 
 def mlp_to_neat(mlp: dict[str, Any]) -> dict[str, Any]:
@@ -295,7 +375,10 @@ def mlp_to_neat(mlp: dict[str, Any]) -> dict[str, Any]:
             for i, src in enumerate(prev):
                 conns.append({"in": src, "out": nid, "weight": W[l - 1][j * layers[l - 1] + i] * scale, "enabled": True})
         prev = ids
-    return {"inputKeys": [-(i + 1) for i in range(layers[0])], "outputKeys": [0, 1], "nodes": nodes, "connections": conns}
+    out = {"inputKeys": [-(i + 1) for i in range(layers[0])], "outputKeys": [0, 1], "nodes": nodes, "connections": conns}
+    if "setup" in mlp:
+        out["setup"] = mlp["setup"]
+    return out
 
 
 # --------------------------------------------------------------------------- training
@@ -326,14 +409,20 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
     stage = 0
     critic_warmup = 0
     misses, lr_scale, best_state = 0, 1.0, None
+    spread = 0.1
     if resume and ckpt.is_file():
         state = torch.load(ckpt, weights_only=False)
-        policy.load_state_dict(state["policy"])
-        if state.get("opt"):
+        widened = state["policy"]["pi.0.weight"].shape[1] != policy.in_dim
+        policy.load_compatible(state["policy"])
+        if state.get("opt") and not widened:
             opt.load_state_dict(state["opt"])
+        if widened:
+            print(f"widened the network to {policy.in_dim} inputs (setup inputs start at zero)")
+            # The starting driver is the fallback until a faster one is found.
+            best_state = {"policy": copy.deepcopy(policy.state_dict()), "opt": copy.deepcopy(opt.state_dict())}
         critic_warmup = state.get("critic_warmup", 0)
         best_file = ckpt.with_name("ppo-best.pt")
-        if best_file.is_file():
+        if best_file.is_file() and not widened:
             best_state = torch.load(best_file, weights_only=False)
         done_steps, best_lap, stage = state["steps"], state.get("best_lap"), state.get("stage", len(LADDER) - 1)
         print(f"resumed at {done_steps:,} steps, best lap {fevo.format_lap_time(best_lap) if best_lap else '—'}")
@@ -342,9 +431,12 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
     if resume and demos.is_file() and done_steps == 0:
         d = np.load(demos)
         bc_x, bc_y = torch.as_tensor(d["X"]), torch.as_tensor(d["Y"])
+        if bc_x.shape[1] < OBS_DIM:  # demos were driven on the default setup: its normalised inputs are 0
+            bc_x = torch.cat([bc_x, torch.zeros(len(bc_x), OBS_DIM - bc_x.shape[1])], dim=1)
         print(f"keeping {len(bc_x):,} expert demonstrations in the loss, fading out over {BC_FADE:.0%} of training")
     env = VecEnv(track, daring, workers, per_worker, seed, max_steps=30 * 60, official_p=0.3)
     env.set_limit(LADDER[stage])
+    env.set_spread(spread)
     sim = fevo.Simulator()
     track_len = fevo.load_track(track).length_m
     stage_name = lambda: "no limit" if LADDER[stage] is None else f"{LADDER[stage] * 3.6:.0f} km/h"  # noqa: E731
@@ -441,11 +533,17 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
                         # Collapse guard: roll back to the best driver and slow learning down.
                         policy.load_state_dict(best_state["policy"])
                         opt.load_state_dict(best_state["opt"])
-                        lr_scale *= 0.5
+                        lr_scale = max(0.1, lr_scale * 0.5)  # a floor, so it keeps learning after repeated rollbacks
                         misses = 0
+                        spread = max(0.1, spread * 0.7)
+                        env.set_spread(spread)
                         tag = f"  << rolled back to best ({fevo.format_lap_time(best_lap)}), learning rate x{lr_scale:.2f}"
                 else:
                     misses = 0
+                if limit is None and res.ranked and spread < 1.0:
+                    # Still finishing laps: let practice setups stray further from the default.
+                    spread = min(1.0, spread * 1.15)
+                    env.set_spread(spread)
                 if limit is None and res.ranked and (best_lap is None or res.median_steps < best_lap):
                     best_state = {"policy": copy.deepcopy(policy.state_dict()), "opt": copy.deepcopy(opt.state_dict())}
                     torch.save(best_state, ckpt.with_name("ppo-best.pt"))
@@ -454,12 +552,12 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
                     winner_path("ppo", track, ".neat.json").write_text(json.dumps(mlp_to_neat(mlp)) + "\n")
                     tag = "  << new best"
                 torch.save({"policy": policy.state_dict(), "opt": opt.state_dict(), "steps": done_steps, "best_lap": best_lap, "stage": stage}, ckpt)
-                live.stage = stage_name()
+                live.stage = f"{stage_name()}, setups ±{spread:.0%}"
                 live.write(sim, done_steps, (time.time() - t0) / 60, res, best_lap, float(torch.stack(buf_r).mean()), float(policy.log_std.exp().mean().detach()))
                 official = res.lap_time or ",".join(f"{l.status}@{l.gates_passed}" for l in res.laps)
                 train_laps = f"{fevo.format_lap_time(min(laps))}" if laps else "—"
                 print(
-                    f"[{stage_name():>9}] {done_steps / 1e6:7.2f}M steps  {(time.time() - t0) / 60:5.1f} min  reward/step {torch.stack(buf_r).mean():.3f}  "
+                    f"[{stage_name():>9} setups ±{spread:4.0%}] {done_steps / 1e6:7.2f}M steps  {(time.time() - t0) / 60:5.1f} min  reward/step {torch.stack(buf_r).mean():.3f}  "
                     f"std {policy.log_std.exp().mean():.2f}  training laps {len(laps):3d} (best {train_laps})  official {official}{tag}",
                     flush=True,
                 )
