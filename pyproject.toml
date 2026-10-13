@@ -1,0 +1,31 @@
+[project]
+name = "fevo-racer1"
+version = "0.1.0"
+description = "fevo-racer1: NEAT agents that learn real F1 circuits on the fevo simulator"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fevo",
+    "neat-python>=2.0.0",
+]
+
+[project.scripts]
+train-curriculum = "fevoracer.cli:train_curriculum"
+train-laptime = "fevoracer.cli:train_laptime"
+benchmark-lap = "fevoracer.cli:benchmark"
+export-winner = "fevoracer.cli:export"
+replay = "fevoracer.cli:replay"
+
+[tool.uv.sources]
+# The fevo SDK from the fevo monorepo next door: same sim.wasm as the website.
+fevo = { path = "../fevo/python/fevo", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fevoracer"]
+
+[tool.uv]
+package = true
