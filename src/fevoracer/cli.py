@@ -65,10 +65,22 @@ def train_ppo() -> None:
     train(a.track, int(a.steps), a.workers, a.envs_per_worker, Daring(daring=a.daring, commit=a.commit, crash=a.crash), a.seed, not a.fresh)
 
 
+def warm_start() -> None:
+    ap = argparse.ArgumentParser(prog="warm-start", description="Imitate the scripted expert (DAgger), then hand over to train-ppo")
+    ap.add_argument("--track", default="spielberg", choices=fevo.track_ids())
+    ap.add_argument("--rounds", type=int, default=6)
+    ap.add_argument("--grip-margin", type=float, default=0.95, help="expert's share of the grip limit")
+    ap.add_argument("--seed", type=int, default=1)
+    a = ap.parse_args()
+    from .warmstart import warm_start as run
+
+    run(a.track, a.rounds, a.grip_margin, a.seed)
+
+
 def _winner(track: str, path: str | None) -> Path:
     if path:
         return Path(path)
-    for mode in ("ppo", "tuned", "laptime", "curriculum"):
+    for mode in ("ppo", "warmstart", "tuned", "laptime", "curriculum"):
         p = winner_path(mode, track)
         if p.is_file():
             return p

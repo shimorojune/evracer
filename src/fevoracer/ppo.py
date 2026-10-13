@@ -21,6 +21,7 @@ Reward per step (only ever used for training; official times are lap time):
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import multiprocessing as mp
@@ -299,7 +300,12 @@ def mlp_to_neat(mlp: dict[str, Any]) -> dict[str, Any]:
 
 # --------------------------------------------------------------------------- training
 
-LR = 3e-4
+LR = 1e-4
+#: Evaluations in a row without a finished official lap before rolling back to the best driver.
+ROLLBACK_AFTER = 6
+#: After a warm start, keep imitating the expert as well, fading out over this share of training
+#: (without it PPO's first updates wrecked the imitated driver within a million steps).
+BC_FADE = 0.4
 ENTROPY = 0.0
 
 
@@ -318,12 +324,25 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
     done_steps = 0
     best_lap: int | None = None
     stage = 0
+    critic_warmup = 0
+    misses, lr_scale, best_state = 0, 1.0, None
     if resume and ckpt.is_file():
         state = torch.load(ckpt, weights_only=False)
         policy.load_state_dict(state["policy"])
-        opt.load_state_dict(state["opt"])
+        if state.get("opt"):
+            opt.load_state_dict(state["opt"])
+        critic_warmup = state.get("critic_warmup", 0)
+        best_file = ckpt.with_name("ppo-best.pt")
+        if best_file.is_file():
+            best_state = torch.load(best_file, weights_only=False)
         done_steps, best_lap, stage = state["steps"], state.get("best_lap"), state.get("stage", len(LADDER) - 1)
         print(f"resumed at {done_steps:,} steps, best lap {fevo.format_lap_time(best_lap) if best_lap else '—'}")
+    demos = CHECKPOINTS / track / "expert-demos.npz"
+    bc_x = bc_y = None
+    if resume and demos.is_file() and done_steps == 0:
+        d = np.load(demos)
+        bc_x, bc_y = torch.as_tensor(d["X"]), torch.as_tensor(d["Y"])
+        print(f"keeping {len(bc_x):,} expert demonstrations in the loss, fading out over {BC_FADE:.0%} of training")
     env = VecEnv(track, daring, workers, per_worker, seed, max_steps=30 * 60, official_p=0.3)
     env.set_limit(LADDER[stage])
     sim = fevo.Simulator()
@@ -379,7 +398,14 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
                     ratio = (dist.log_prob(A[i]).sum(-1) - LP[i]).exp()
                     pl = -torch.min(ratio * ADV[i], ratio.clamp(1 - clip, 1 + clip) * ADV[i]).mean()
                     vl = 0.5 * (policy.v(O[i]).squeeze(-1) - RET[i]).pow(2).mean()
-                    loss = pl + 0.5 * vl - ENTROPY * dist.entropy().sum(-1).mean()
+                    # After a warm start, train only the value function for a few updates,
+                    # so untrained value estimates don't wreck the imitated policy.
+                    loss = (0.5 * vl) if update < critic_warmup else (pl + 0.5 * vl - ENTROPY * dist.entropy().sum(-1).mean())
+                    if bc_x is not None:
+                        w = max(0.0, 1.0 - done_steps / (BC_FADE * total_steps))
+                        if w > 0:
+                            j = torch.randint(0, len(bc_x), (len(i),))
+                            loss = loss + 2.0 * w * (policy.pi(bc_x[j]) - bc_y[j]).pow(2).mean()
                     opt.zero_grad()
                     loss.backward()
                     nn.utils.clip_grad_norm_(policy.parameters(), 0.5)
@@ -391,7 +417,7 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
             crash_pts = [idx for b in live.ends for st, idx in b if st in ("crashed", "stopped")]
             env.set_hot(crash_pts[-2000:])
             for g in opt.param_groups:  # linear learning-rate decay
-                g["lr"] = LR * max(0.1, 1 - done_steps / total_steps)
+                g["lr"] = LR * lr_scale * max(0.1, 1 - done_steps / total_steps)
 
             if update % 5 == 0:
                 mlp = policy.to_mlp()
@@ -409,14 +435,27 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
                     stage += 1
                     obs = torch.as_tensor(env.set_limit(LADDER[stage]))
                     tag = f"  >> stage passed, speed limit now {stage_name()}"
+                if limit is None and not res.ranked:
+                    misses += 1
+                    if best_state is not None and misses >= ROLLBACK_AFTER:
+                        # Collapse guard: roll back to the best driver and slow learning down.
+                        policy.load_state_dict(best_state["policy"])
+                        opt.load_state_dict(best_state["opt"])
+                        lr_scale *= 0.5
+                        misses = 0
+                        tag = f"  << rolled back to best ({fevo.format_lap_time(best_lap)}), learning rate x{lr_scale:.2f}"
+                else:
+                    misses = 0
                 if limit is None and res.ranked and (best_lap is None or res.median_steps < best_lap):
+                    best_state = {"policy": copy.deepcopy(policy.state_dict()), "opt": copy.deepcopy(opt.state_dict())}
+                    torch.save(best_state, ckpt.with_name("ppo-best.pt"))
                     best_lap = res.median_steps
                     winner_path("ppo", track).write_text(json.dumps(mlp) + "\n")
                     winner_path("ppo", track, ".neat.json").write_text(json.dumps(mlp_to_neat(mlp)) + "\n")
                     tag = "  << new best"
                 torch.save({"policy": policy.state_dict(), "opt": opt.state_dict(), "steps": done_steps, "best_lap": best_lap, "stage": stage}, ckpt)
                 live.stage = stage_name()
-                live.write(sim, done_steps, (time.time() - t0) / 60, res, best_lap, float(torch.stack(buf_r).mean()), float(policy.log_std.exp().mean()))
+                live.write(sim, done_steps, (time.time() - t0) / 60, res, best_lap, float(torch.stack(buf_r).mean()), float(policy.log_std.exp().mean().detach()))
                 official = res.lap_time or ",".join(f"{l.status}@{l.gates_passed}" for l in res.laps)
                 train_laps = f"{fevo.format_lap_time(min(laps))}" if laps else "—"
                 print(
