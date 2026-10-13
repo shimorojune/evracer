@@ -34,6 +34,7 @@
   <select id="run"></select>
   <div class="stat"><span>Training steps</span><b id="steps">–</b></div>
   <div class="stat"><span>Training time</span><b id="mins">–</b></div>
+  <div class="stat"><span>Curriculum stage</span><b id="stage">–</b></div>
   <div class="stat"><span>Reward / step</span><b id="reward">–</b></div>
   <div class="stat"><span>Best official lap</span><b id="best">–</b></div>
   <div class="stat"><span>Latest official laps</span><div id="official"></div></div>
@@ -106,6 +107,7 @@ function header() {
   $("steps").textContent = `${(snap.steps / 1e6).toFixed(2)}M`;
   $("mins").textContent = `${snap.minutes.toFixed(1)} min`;
   $("reward").textContent = snap.reward.toFixed(3);
+  $("stage").textContent = snap.stage ? `speed limit: ${snap.stage}` : "–";
   $("best").textContent = snap.bestLap ? fmt(snap.bestLap) : "no finished lap yet";
   $("official").innerHTML = snap.official.map((l) => `<span class="pill ${l.status === "finished" ? "ok" : ""}">${l.status === "finished" ? fmt(l.steps) : `${l.status} @ gate ${l.gates}`}</span>`).join("");
   $("camTitle").textContent = `Latest official lap (seed 2): ${snap.lap.status === "finished" ? fmt(snap.lap.steps) : `${snap.lap.status} at gate ${snap.lap.gates} of ${track.gates.length}`}`;

@@ -31,6 +31,7 @@ class LiveWriter:
         self.path = live_path(mode, track)
         self.ends: deque[list[tuple[str, int]]] = deque(maxlen=window)
         self.history: list[dict[str, Any]] = []
+        self.stage: str | None = None
 
     def add_ends(self, ends: list[tuple[str, int]]) -> None:
         self.ends.append(ends)
@@ -51,7 +52,7 @@ class LiveWriter:
                              "lap": result.median_steps, "reward": round(reward, 4)})  # fmt: skip
         snap = {
             "mode": self.mode, "track": self.track.id, "steps": steps, "minutes": round(minutes, 2),
-            "reward": reward, "std": std, "bestLap": best_lap,
+            "reward": reward, "std": std, "bestLap": best_lap, "stage": self.stage,
             "official": [{"seed": l.seed, "status": l.status, "steps": l.steps, "gates": l.gates_passed} for l in result.laps],
             "lap": {"status": lap.status, "steps": lap.steps, "gates": lap.gates_passed, "every": k,
                     "x": rnd(t["x"], 100), "y": rnd(t["y"], 100), "yaw": rnd(t["yaw"], 1000), "speed": rnd(t["speed"], 10),

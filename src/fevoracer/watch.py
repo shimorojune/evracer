@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import urllib.request
 import webbrowser
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -56,13 +57,35 @@ class Handler(BaseHTTPRequestHandler):
         self._send(b"not found", "text/plain", 404)
 
 
+def _is_watch_server(port: int) -> bool:
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/runs", timeout=0.5) as r:
+            return r.headers.get("content-type", "").startswith("application/json")
+    except Exception:
+        return False
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="watch", description="Watch training live (separate process; doesn't slow training)")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--no-open", action="store_true")
     a = ap.parse_args()
-    server = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
-    url = f"http://localhost:{a.port}/"
+    server = None
+    for port in range(a.port, a.port + 20):
+        if _is_watch_server(port):
+            url = f"http://localhost:{port}/"
+            print(f"A watch page is already running at {url}; opening it.")
+            if not a.no_open:
+                webbrowser.open(url)
+            return
+        try:
+            server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+            break
+        except OSError:
+            continue  # port taken by something else: try the next one
+    if server is None:
+        raise SystemExit(f"No free port between {a.port} and {a.port + 19}; pass --port.")
+    url = f"http://localhost:{server.server_address[1]}/"
     print(f"Watching training at {url} (Ctrl+C to stop). Training itself isn't affected.")
     if not a.no_open:
         webbrowser.open(url)
