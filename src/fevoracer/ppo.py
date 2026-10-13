@@ -115,7 +115,7 @@ class RaceEnv:
         bonus = 1.0 + d.daring * usage * usage + d.commit * min(1.0, vx / ref)
         r = d.progress * moved * (bonus if moved > 0 else 1.0)
         done = status != "running"
-        info: dict[str, Any] = {}
+        info: dict[str, Any] = {"status": status}
         if status == "finished":
             r += d.lap + d.lap_time * max(0, self.lap_limit - steps)
             if self.official:  # a full lap from the start line, not a practice run reaching it
@@ -136,17 +136,18 @@ def _worker(conn: Any, track: str, daring: dict[str, float], k: int, seed: int, 
         if msg is None:
             break
         actions = msg
-        out_obs, rew, done, laps = [], [], [], []
+        out_obs, rew, done, laps, ends = [], [], [], [], []
         for e, a in zip(envs, actions):
             o, r, dn, info = e.step(float(a[0]), float(a[1]))
             if dn:
+                ends.append((info.get("status", ""), e.idx))
                 o = e.reset()
             if "lap_steps" in info:
                 laps.append(info["lap_steps"])
             out_obs.append(o)
             rew.append(r)
             done.append(dn)
-        conn.send((np.array(out_obs, dtype=np.float32), np.array(rew, dtype=np.float32), np.array(done), laps))
+        conn.send((np.array(out_obs, dtype=np.float32), np.array(rew, dtype=np.float32), np.array(done), laps, ends))
 
 
 class VecEnv:
@@ -168,6 +169,7 @@ class VecEnv:
         res = [c.recv() for c in self.conns]
         self.obs = np.concatenate([r[0] for r in res])
         laps = [l for r in res for l in r[3]]
+        self.ends = [e for r in res for e in r[4]]
         return self.obs, np.concatenate([r[1] for r in res]), np.concatenate([r[2] for r in res]), laps
 
     def close(self) -> None:
@@ -260,6 +262,9 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
         print(f"resumed at {done_steps:,} steps, best lap {fevo.format_lap_time(best_lap) if best_lap else '—'}")
     env = VecEnv(track, daring, workers, per_worker, seed, max_steps=30 * 60, official_p=0.3)
     sim = fevo.Simulator()
+    from .live import LiveWriter
+
+    live = LiveWriter("ppo", track)
     print(f"PPO on {track}: {n_envs} envs over {workers} workers, reward {asdict(daring)}", flush=True)
     t0 = time.time()
     obs = torch.as_tensor(env.obs)
@@ -268,6 +273,7 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
         while done_steps < total_steps:
             buf_o, buf_a, buf_lp, buf_r, buf_d, buf_v = [], [], [], [], [], []
             laps: list[int] = []
+            ends: list[tuple[str, int]] = []
             for _ in range(horizon):
                 with torch.no_grad():
                     dist = policy.dist(obs)
@@ -282,6 +288,7 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
                 buf_d.append(torch.as_tensor(d, dtype=torch.float32))
                 buf_v.append(v)
                 laps += lap
+                ends += env.ends
                 obs = torch.as_tensor(nobs)
             with torch.no_grad():
                 last_v = policy.v(obs).squeeze(-1)
@@ -312,6 +319,7 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
                     opt.step()
             done_steps += horizon * n_envs
             update += 1
+            live.add_ends(ends)
             for g in opt.param_groups:  # linear learning-rate decay
                 g["lr"] = LR * max(0.1, 1 - done_steps / total_steps)
 
@@ -325,6 +333,7 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
                     winner_path("ppo", track, ".neat.json").write_text(json.dumps(mlp_to_neat(mlp)) + "\n")
                     tag = "  << new best"
                 torch.save({"policy": policy.state_dict(), "opt": opt.state_dict(), "steps": done_steps, "best_lap": best_lap}, ckpt)
+                live.write(sim, done_steps, (time.time() - t0) / 60, res, best_lap, float(torch.stack(buf_r).mean()), float(policy.log_std.exp().mean()))
                 official = res.lap_time or ",".join(f"{l.status}@{l.gates_passed}" for l in res.laps)
                 train_laps = f"{fevo.format_lap_time(min(laps))}" if laps else "—"
                 print(

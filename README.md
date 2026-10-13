@@ -31,6 +31,16 @@ uv run tune-laptime                          # continues from winners/tuned-<tra
 
 `src/fevoracer/analysis.py` computes a reference lap (the fastest this car could go round the centre line) and the time lost gate by gate.
 
+## Watch training live
+
+While any trainer runs, in a second terminal:
+
+```bash
+uv run watch                                 # opens http://localhost:8765
+```
+
+The page shows the latest official lap driven by the current network (looping, with a crash marker where it ends), a map of where training runs have been crashing or stopping, and progress over time. The trainer only writes one small snapshot per evaluation (one extra traced lap, about 0.1 s every few updates); the page runs in its own process, so training speed is unaffected. PPO writes snapshots today.
+
 ## Check, export, watch
 
 ```bash

@@ -20,6 +20,7 @@ train-ppo = "fevoracer.cli:train_ppo"
 benchmark-lap = "fevoracer.cli:benchmark"
 export-winner = "fevoracer.cli:export"
 replay = "fevoracer.cli:replay"
+watch = "fevoracer.watch:main"
 
 [tool.uv.sources]
 # The fevo SDK from the fevo monorepo next door: same sim.wasm as the website.

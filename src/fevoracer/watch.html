@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fevo-racer1 live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;800&family=Chivo+Mono&display=swap" rel="stylesheet">
+<style>
+  :root { --fg:#121417; --muted:#586070; --bg:#eef0f3; --panel:#fff; --line:#d5d9df; --blue:#1f5fd6; --red:#c2372b; --amber:#c98a12; --green:#1e8e4e; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 Chivo, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+  header { display:flex; flex-wrap:wrap; gap:10px 20px; align-items:center; padding:12px 16px; background:var(--panel); border-bottom:1px solid var(--line); }
+  h1 { font-size:18px; margin:0; font-weight:800; }
+  select { font:inherit; height:30px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .stat { display:flex; flex-direction:column; } .stat b { font-family:"Chivo Mono", monospace; font-size:16px; } .stat span { color:var(--muted); font-size:12px; }
+  .pill { font-size:12px; font-weight:600; padding:2px 8px; border-radius:99px; background:#fbe9e6; color:var(--red); margin-right:4px; }
+  .pill.ok { background:#e3f4ea; color:var(--green); }
+  main { display:grid; grid-template-columns: minmax(0,1fr) 380px; gap:16px; padding:16px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .panel h2 { font-size:13px; font-weight:600; color:var(--muted); margin:10px 12px 4px; }
+  canvas { display:block; width:100%; }
+  #cam { height:min(58vh, 560px); background:#e6e9e2; }
+  #map { aspect-ratio:1; }
+  #chart { height:170px; }
+  .note { color:var(--muted); font-size:12px; padding:4px 12px 10px; }
+  .legend span { display:inline-flex; align-items:center; gap:4px; margin-right:10px; } .legend i { width:10px; height:10px; border-radius:50%; display:inline-block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>fevo-racer1 live</h1>
+  <select id="run"></select>
+  <div class="stat"><span>Training steps</span><b id="steps">–</b></div>
+  <div class="stat"><span>Training time</span><b id="mins">–</b></div>
+  <div class="stat"><span>Reward / step</span><b id="reward">–</b></div>
+  <div class="stat"><span>Best official lap</span><b id="best">–</b></div>
+  <div class="stat"><span>Latest official laps</span><div id="official"></div></div>
+  <div class="stat"><span>Updated</span><b id="age">–</b></div>
+</header>
+<main>
+  <div class="panel">
+    <h2 id="camTitle">Latest official lap (seed 2)</h2>
+    <canvas id="cam"></canvas>
+    <p class="note">The trainer drives one official lap with the current network at every evaluation and saves it; this page loops the newest one. It runs in its own process, so training isn't slowed.</p>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:16px">
+    <div class="panel">
+      <h2>Where training runs end (last ~20 updates)</h2>
+      <canvas id="map"></canvas>
+      <p class="note legend"><span><i style="background:var(--red)"></i>crashes</span><span><i style="background:var(--amber)"></i>stopped</span><span><i style="background:var(--blue)"></i>latest lap</span></p>
+    </div>
+    <div class="panel">
+      <h2>Progress: gates reached on official laps, and lap time when it finishes</h2>
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let run = null, snap = null, track = null, geo = null, frame = 0, last = performance.now(), fetchedAt = 0;
+const fmt = (steps) => { const cs = Math.round(steps / 60 * 100); return `${Math.floor(cs / 6000)}:${((cs % 6000) / 100).toFixed(2).padStart(5, "0")}`; };
+
+function fit(cv) { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; const w = Math.round(r.width * d), h = Math.round(r.height * d); if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; } return d; }
+
+function buildGeo(t) {
+  const n = t.widthLeft.length, c = t.centerline, L = [], R = [], RL = [];
+  for (let i = 0; i < n; i++) {
+    const p = (i - 1 + n) % n, q = (i + 1) % n, tx = c[2*q] - c[2*p], ty = c[2*q+1] - c[2*p+1], len = Math.hypot(tx, ty), nx = -ty / len, ny = tx / len;
+    L.push([c[2*i] + nx * t.widthLeft[i], c[2*i+1] + ny * t.widthLeft[i]]);
+    R.push([c[2*i] - nx * t.widthRight[i], c[2*i+1] - ny * t.widthRight[i]]);
+    RL.push([c[2*i] + nx * t.racingOffset[i], c[2*i+1] + ny * t.racingOffset[i]]);
+  }
+  const loop = (pts) => { const p = new Path2D(); pts.forEach(([x, y], i) => i ? p.lineTo(x, y) : p.moveTo(x, y)); p.closePath(); return p; };
+  const surface = new Path2D(); const left = loop(L), right = loop(R); surface.addPath(left); surface.addPath(right);
+  let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9; for (const [x, y] of [...L, ...R]) { minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); }
+  const gatePts = t.gates.map((g) => [(L[g][0] + R[g][0]) / 2, (L[g][1] + R[g][1]) / 2]);
+  return { left, right, surface, racing: loop(RL), gatePts, start: [L[t.gates[0]], R[t.gates[0]]], bounds: { minX, minY, maxX, maxY } };
+}
+
+async function loadRuns() {
+  const runs = await (await fetch("/runs")).json();
+  const sel = $("run"); const cur = sel.value;
+  sel.innerHTML = runs.length ? runs.map((r) => `<option>${r}</option>`).join("") : "<option>no training running yet</option>";
+  if (runs.includes(cur)) sel.value = cur;
+  if (!run && runs.length) run = runs[0];
+}
+$("run").onchange = (e) => { run = e.target.value; snap = null; };
+
+async function poll() {
+  try {
+    await loadRuns();
+    if (run) {
+      const s = await (await fetch(`/live/${run}.json`)).json();
+      if (!track || track.id !== s.track) { track = await (await fetch(`/track/${s.track}.json`)).json(); geo = buildGeo(track); }
+      const fresh = !snap || s.steps !== snap.steps;
+      snap = s; fetchedAt = Date.now();
+      if (fresh) { frame = 0; header(); }
+    }
+  } catch (e) { console.warn(e); }
+  setTimeout(poll, 3000);
+}
+
+function header() {
+  $("steps").textContent = `${(snap.steps / 1e6).toFixed(2)}M`;
+  $("mins").textContent = `${snap.minutes.toFixed(1)} min`;
+  $("reward").textContent = snap.reward.toFixed(3);
+  $("best").textContent = snap.bestLap ? fmt(snap.bestLap) : "no finished lap yet";
+  $("official").innerHTML = snap.official.map((l) => `<span class="pill ${l.status === "finished" ? "ok" : ""}">${l.status === "finished" ? fmt(l.steps) : `${l.status} @ gate ${l.gates}`}</span>`).join("");
+  $("camTitle").textContent = `Latest official lap (seed 2): ${snap.lap.status === "finished" ? fmt(snap.lap.steps) : `${snap.lap.status} at gate ${snap.lap.gates} of ${track.gates.length}`}`;
+}
+
+function sample(a, f) { const i = Math.min(a.length - 1, Math.floor(f)), k = f - i, b = a[Math.min(i + 1, a.length - 1)]; return a[i] + (b - a[i]) * k; }
+
+function car(ctx) {
+  ctx.fillStyle = "#111"; for (const [x0, x1] of [[-2.15, -1.35], [1.25, 1.95]]) for (const s of [-1, 1]) ctx.fillRect(x0, s > 0 ? 0.53 : -0.95, x1 - x0, 0.42);
+  ctx.fillStyle = "#121417"; ctx.fillRect(-2.65, -0.78, 0.38, 1.56); ctx.fillRect(2.33, -0.9, 0.32, 1.8);
+  ctx.fillStyle = "#1f5fd6"; ctx.beginPath(); const pts = [[2.45, 0.1], [1.3, 0.2], [0.7, 0.42], [-0.2, 0.62], [-1.2, 0.55], [-2.25, 0.28]];
+  ctx.moveTo(2.6, 0); for (const [x, y] of pts) ctx.lineTo(x, y); for (const [x, y] of [...pts].reverse()) ctx.lineTo(x, -y); ctx.closePath(); ctx.fill();
+  ctx.lineWidth = 0.07; ctx.strokeStyle = "#fff"; ctx.stroke();
+}
+
+function drawCam() {
+  const cv = $("cam"), ctx = cv.getContext("2d"), d = fit(cv), W = cv.width, H = cv.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = "#e6e9e2"; ctx.fillRect(0, 0, W, H);
+  if (!snap || !geo) { ctx.fillStyle = "#586070"; ctx.font = `${14 * d}px Chivo`; ctx.fillText("Waiting for the first evaluation…", 20 * d, 30 * d); return; }
+  const L = snap.lap, f = Math.min(frame, L.x.length - 1), x = sample(L.x, f), y = sample(L.y, f), z = 7 * d;
+  ctx.setTransform(z, 0, 0, -z, W / 2 - x * z, H / 2 + y * z);
+  ctx.fillStyle = "#3b3e44"; ctx.fill(geo.surface, "evenodd");
+  ctx.lineWidth = 0.3; ctx.strokeStyle = "#fff"; ctx.stroke(geo.left); ctx.stroke(geo.right);
+  ctx.setLineDash([2, 2]); ctx.lineWidth = 0.25; ctx.strokeStyle = "rgba(255,209,102,.6)"; ctx.stroke(geo.racing); ctx.setLineDash([]);
+  ctx.beginPath(); const from = Math.max(0, Math.floor(f) - 180); for (let i = from; i <= Math.floor(f); i++) i === from ? ctx.moveTo(L.x[i], L.y[i]) : ctx.lineTo(L.x[i], L.y[i]); ctx.strokeStyle = "rgba(31,95,214,.7)"; ctx.lineWidth = 0.35; ctx.stroke();
+  ctx.save(); ctx.translate(x, y); let a = L.yaw[Math.floor(f)]; ctx.rotate(a); car(ctx); ctx.restore();
+  const ended = f >= L.x.length - 1 && L.status !== "finished";
+  if (ended) { ctx.strokeStyle = "#c2372b"; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(x - 3, y - 3); ctx.lineTo(x + 3, y + 3); ctx.moveTo(x - 3, y + 3); ctx.lineTo(x + 3, y - 3); ctx.stroke(); }
+  ctx.setTransform(d, 0, 0, d, 0, 0); ctx.fillStyle = "#121417"; ctx.font = "600 15px Chivo";
+  const i = Math.floor(f);
+  ctx.fillText(`${fmt(i * L.every)}   ${Math.round(L.speed[i] * 3.6)} km/h   gate ${L.gate[i]}`, 14, 24);
+  ctx.font = "13px Chivo"; ctx.fillStyle = L.throttle[i] >= 0 ? "#1e8e4e" : "#c2372b";
+  ctx.fillText(`${L.throttle[i] >= 0 ? "throttle" : "brake"} ${Math.abs(L.throttle[i]).toFixed(2)}   steer ${L.steer[i].toFixed(2)}`, 14, 44);
+  if (ended) { ctx.fillStyle = "#c2372b"; ctx.font = "600 15px Chivo"; ctx.fillText(L.status.toUpperCase(), 14, 66); }
+}
+
+function drawMap() {
+  const cv = $("map"), ctx = cv.getContext("2d"), d = fit(cv), W = cv.width, H = cv.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
+  if (!snap || !geo) return;
+  const b = geo.bounds, pad = 14 * d, s = Math.min((W - 2 * pad) / (b.maxX - b.minX), (H - 2 * pad) / (b.maxY - b.minY));
+  const ox = (W - (b.maxX - b.minX) * s) / 2 - b.minX * s, oy = (H + (b.maxY - b.minY) * s) / 2 + b.minY * s;
+  ctx.setTransform(s, 0, 0, -s, ox, oy);
+  ctx.fillStyle = "#c9ced6"; ctx.fill(geo.surface, "evenodd");
+  const L = snap.lap, f = Math.min(frame, L.x.length - 1);
+  ctx.beginPath(); for (let i = 0; i <= Math.floor(f); i++) i ? ctx.lineTo(L.x[i], L.y[i]) : ctx.moveTo(L.x[0], L.y[0]); ctx.strokeStyle = "rgba(31,95,214,.8)"; ctx.lineWidth = 2 * d / s; ctx.stroke();
+  for (const [kind, color] of [["crashed", "rgba(194,55,43,.55)"], ["stopped", "rgba(201,138,18,.6)"]]) {
+    const counts = snap.ends[kind]; if (!counts) continue; const max = Math.max(...counts, 1);
+    counts.forEach((c, gi) => { if (!c) return; const [gx, gy] = geo.gatePts[gi]; ctx.beginPath(); ctx.arc(gx, gy, (3 + 14 * Math.sqrt(c / max)) * d / s, 0, 2 * Math.PI); ctx.fillStyle = color; ctx.fill(); });
+  }
+  ctx.beginPath(); ctx.arc(sample(L.x, f), sample(L.y, f), 5 * d / s, 0, 2 * Math.PI); ctx.fillStyle = "#1f5fd6"; ctx.fill(); ctx.lineWidth = 1.5 * d / s; ctx.strokeStyle = "#fff"; ctx.stroke();
+}
+
+function drawChart() {
+  const cv = $("chart"), ctx = cv.getContext("2d"), d = fit(cv), W = cv.width, H = cv.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
+  if (!snap || snap.history.length < 2) return;
+  const h = snap.history, G = track.gates.length, x0 = h[0].steps, x1 = h[h.length - 1].steps || 1, pad = 28 * d;
+  const X = (s) => pad + (W - 2 * pad) * (s - x0) / Math.max(1, x1 - x0), Y = (g) => H - pad - (H - 2 * pad) * g / G;
+  ctx.strokeStyle = "#e4e7eb"; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(pad, Y(G)); ctx.lineTo(W - pad, Y(G)); ctx.stroke();
+  ctx.beginPath(); h.forEach((p, i) => i ? ctx.lineTo(X(p.steps), Y(p.gates)) : ctx.moveTo(X(p.steps), Y(p.gates))); ctx.strokeStyle = "#1f5fd6"; ctx.lineWidth = 2 * d; ctx.stroke();
+  const laps = h.filter((p) => p.lap);
+  if (laps.length) {
+    const lo = Math.min(...laps.map((p) => p.lap)), hi = Math.max(...laps.map((p) => p.lap)) + 1;
+    const LY = (l) => pad + (H - 2 * pad) * (l - lo) / Math.max(1, hi - lo);
+    ctx.fillStyle = "#1e8e4e"; for (const p of laps) { ctx.beginPath(); ctx.arc(X(p.steps), LY(p.lap), 3 * d, 0, 2 * Math.PI); ctx.fill(); }
+    ctx.font = `${11 * d}px Chivo`; ctx.fillText(`laps ${fmt(lo)}–${fmt(hi)}`, W - pad - 110 * d, 14 * d);
+  }
+  ctx.fillStyle = "#586070"; ctx.font = `${11 * d}px Chivo`;
+  ctx.fillText(`${G} gates = full lap`, pad, 14 * d); ctx.fillText(`${(x0 / 1e6).toFixed(1)}M`, pad, H - 8 * d); ctx.fillText(`${(x1 / 1e6).toFixed(1)}M steps`, W - pad - 60 * d, H - 8 * d);
+}
+
+function tick(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (snap) { frame += dt * 60 / snap.lap.every; if (frame > snap.lap.x.length + 60) frame = 0; $("age").textContent = `${Math.round((Date.now() - fetchedAt) / 1000)}s ago`; }
+  drawCam(); drawMap(); drawChart();
+  requestAnimationFrame(tick);
+}
+poll(); requestAnimationFrame(tick);
+</script>
+</body>
+</html>
