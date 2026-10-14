@@ -36,7 +36,7 @@ import numpy as np
 
 import fevo
 
-from .gap import qss, ref_line
+from .gap import curvature, qss, ref_line
 
 
 class LineExpert:
@@ -44,20 +44,31 @@ class LineExpert:
                  grip_use: float = 0.95, look_s: float = 0.30, look_min: float = 6.0, speed_look_s: float = 0.12,
                  kp: float = 3.0, yaw_damp: float = 0.02, line_scale: float = 0.9, k_cross: float = 2.0,
                  brake_on: float = 0.9, drive_use: float = 0.9, lift_on_slide: bool = True, slow_margin: float = 0.9,
-                 slow_below: float = 30.0, launch_min: float = 0.15, launch_below: float = 20.0) -> None:
+                 slow_below: float = 30.0, launch_min: float = 0.15, launch_below: float = 20.0,
+                 understeer_cut: float = 0.0, observable: bool = False, k_head: float = 1.0, k_e: float = 2.5,
+                 ff_look_s: float = 0.1, brake_plan: float = 1.0) -> None:
         self.car = car = rules.car_for(setup)
         # The reference line keeps 1.45 m from the edges (0.5 m outside the car's half width): pull it in a little.
         _, c, self.nl, off, _ = ref_line(track)
         self.p = c + self.nl * (off * line_scale)[:, None]
         self.k_cross, self.brake_on, self.drive_use, self.lift_on_slide = k_cross, brake_on, drive_use, lift_on_slide
         self.launch_min, self.launch_below = launch_min, launch_below
+        self.understeer_cut = understeer_cut
+        self.k = curvature(self.p, 10)
         self.n = len(self.p)
+        # Signed line heading and curvature (left positive), for the observable steering law.
+        d = np.roll(self.p, -1, 0) - self.p
+        self.theta = np.arctan2(d[:, 1], d[:, 0])
+        h = 10
+        dth = (np.roll(self.theta, -h) - np.roll(self.theta, h) + np.pi) % (2 * np.pi) - np.pi
+        self.ks = dth / (2 * h * np.maximum(np.linalg.norm(d, axis=1), 1e-6))
+        self.observable, self.k_head, self.k_e, self.ff_look_s = observable, k_head, k_e, ff_look_s
         # The margin goes on cornering speeds only: straights stay flat out and braking stays at the limit.
         # Slow corners (below slow_below m/s) get a bigger one: there the car is limited by steering lock and
         # how fast the fronts build slip angle, which the quasi-steady limits don't see.
         vmax = qss(self.p, car, vehicle=True, standing=False, h_curv=10).vmax
         scale = np.where(vmax < slow_below, slow_margin, margin)
-        self.v = qss(self.p, car, vehicle=True, standing=False, h_curv=10, corner_scale=scale).v[: self.n]
+        self.v = qss(self.p, car, vehicle=True, standing=False, h_curv=10, corner_scale=scale, brake_scale=brake_plan).v[: self.n]
         seg = np.linalg.norm(np.roll(self.p, -1, 0) - self.p, axis=1)
         self.s = np.concatenate([[0.0], np.cumsum(seg)])  # arc length to each line point (n + 1 values)
         self.brake_look = 320
@@ -66,6 +77,54 @@ class LineExpert:
         self.hz = rules.agent_hz
         self.j = 0
         self.vx_prev = 0.0
+
+    def _observable(self, x: float, y: float, yaw: float, vx: float, j: int) -> tuple[float, float]:
+        """The same driving from what the network's inputs reveal: pose relative to the track and speed.
+
+        No yaw rate, sideways velocity, wheelspin or acceleration (the network has none of them and no memory):
+        Stanley steering on heading and lateral error plus curvature feed-forward, and tyre limits from the
+        line's curvature instead of the measured lateral acceleration."""
+        car = self.car
+        m, g, L, a = car["massKg"], car["gravityMps2"], car["wheelbaseM"], car["cgToFrontM"]
+        b = L - a
+        fx, fy = x + a * math.cos(yaw), y + a * math.sin(yaw)
+        jf = self._nearest(fx, fy, j)
+        e_left = float(np.dot((fx - self.p[jf][0], fy - self.p[jf][1]), self.nl[jf]))
+        head = (self.theta[jf] - yaw + math.pi) % (2 * math.pi) - math.pi
+        kff = float(self.ks[(jf + int(round(self.ff_look_s * vx))) % self.n])
+        delta_left = self.k_head * head - math.atan(self.k_e * e_left / (vx + 5.0)) + math.atan(L * kff)
+        steer = max(-1.0, min(1.0, -delta_left / car["maxSteerRad"]))
+
+        q = 0.5 * car["airDensityKgM3"] * vx * vx
+        df = q * car["downforceAreaM2"]
+        fzf = m * g * b / L + df * car["aeroBalanceFront"]
+        fzr = m * g * a / L + df * (1 - car["aeroBalanceFront"])
+        # Cornering load at the planned speed (not the current one: still too fast at turn-in, that would leave
+        # no grip to brake with).
+        v_plan = min(vx, float(self.v[j]))
+        ay = v_plan * v_plan * abs(float(self.ks[j]))
+        capf, capr = self.grip_use * car["tyreMuFront"] * fzf, self.grip_use * car["tyreMuRear"] * fzr
+        fyf, fyr = min(capf, m * ay * b / L), min(capr, m * ay * a / L)
+        long_f = math.sqrt(max(0.0, capf * capf - fyf * fyf))
+        long_r = math.sqrt(max(0.0, capr * capr - fyr * fyr))
+        drag = q * car["dragAreaM2"] + car["rollingResistance"] * m * g
+        k = np.arange(j + 1, j + self.brake_look + 1)
+        d = np.maximum(0.5, (self.s[k % self.n] + (k // self.n) * self.s[self.n]) - self.s[j] - self.speed_look_s * vx)
+        need_dec = float(np.max((vx * vx - self.v[k % self.n] ** 2) / (2 * d)))
+        v_t = self.v[(j + int(round(max(3.0, self.speed_look_s * vx)))) % self.n]
+        bias = car["brakeBiasFront"]
+        bmax = min(long_f / bias, long_r / (1 - bias), car["maxBrakeForceN"])
+        if need_dec * m > self.brake_on * (bmax + drag):
+            return steer, -min(need_dec * m - drag, bmax) / car["maxBrakeForceN"]
+        f_need = m * self.kp * (v_t - vx) + drag
+        if f_need < 0:
+            return steer, -min(-f_need, bmax) / car["maxBrakeForceN"]
+        capr_d = capr / self.grip_use * self.drive_use
+        drive = min(f_need, math.sqrt(max(0.0, capr_d * capr_d - fyr * fyr)))
+        throttle = min(1.0, drive * max(vx, 1.0) / car["powerW"])
+        if vx < self.launch_below:
+            throttle = max(throttle, self.launch_min)
+        return steer, throttle
 
     def reset(self) -> None:
         self.j = 0
@@ -87,6 +146,9 @@ class LineExpert:
         j = self._nearest(x, y, idx)
         m, g, L, a = car["massKg"], car["gravityMps2"], car["wheelbaseM"], car["cgToFrontM"]
         b, h = L - a, car["cgHeightM"]
+
+        if self.observable:
+            return self._observable(x, y, yaw, vx, j)
 
         # Steering: pure pursuit from the rear axle.
         ld = max(self.look_min, self.look_s * vx)
@@ -139,6 +201,14 @@ class LineExpert:
             drive = min(f_need, math.sqrt(max(0.0, capr_d * capr_d - fyr * fyr)))
             if self.lift_on_slide and c("getRearSlide") > 0 and vx >= self.launch_below:
                 drive = 0.0
+            # Understeer: the car rotates less than the line needs (fronts saturated, running wide). Power only
+            # makes it worse, so hold it back in proportion until the car turns.
+            if self.understeer_cut > 0 and vx > 10:
+                r_need = vx * float(self.k[(j + int(round(0.2 * vx))) % self.n])
+                if r_need > 0.05:
+                    short = 1.0 - abs(r) / r_need
+                    if short > 0.1:
+                        drive *= max(0.0, 1.0 - self.understeer_cut * (short - 0.1))
             throttle = min(1.0, drive * max(vx, 1.0) / car["powerW"])
             # Off the line the exact traction limit is a throttle of about 0.01, too fine for a network to
             # copy; a little launch wheelspin costs almost nothing and is far easier to learn.

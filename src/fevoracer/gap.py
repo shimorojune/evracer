@@ -69,8 +69,9 @@ class Lap:
     lap_s: float
 
 
-def qss(p: np.ndarray, car: dict[str, float], vehicle: bool, standing: bool, h_curv: int = 3, corner_scale: float = 1.0) -> Lap:
-    """corner_scale < 1 keeps a margin on cornering speeds only; braking and acceleration stay at the limit."""
+def qss(p: np.ndarray, car: dict[str, float], vehicle: bool, standing: bool, h_curv: int = 3, corner_scale=1.0,
+        brake_scale: float = 1.0) -> Lap:
+    """corner_scale < 1 keeps a margin on cornering speeds only; brake_scale < 1 plans braking below the limit."""
     n = len(p)
     k = curvature(p, h_curv)
     ds = np.linalg.norm(np.roll(p, -1, 0) - p, axis=1)
@@ -146,7 +147,7 @@ def qss(p: np.ndarray, car: dict[str, float], vehicle: bool, standing: bool, h_c
         if not standing:
             v[n] = v[0]
         for i in range(n - 1, -1, -1):
-            nv = math.sqrt(v[i + 1] ** 2 + 2 * decel(v[i + 1], k[(i + 1) % n]) * ds[i])
+            nv = math.sqrt(v[i + 1] ** 2 + 2 * brake_scale * decel(v[i + 1], k[(i + 1) % n]) * ds[i])
             if nv < v[i] and not (standing and i == 0):
                 v[i] = nv
         if not standing:
