@@ -92,6 +92,24 @@ def practice() -> None:
     run(a.track, a.runs, a.seed)
 
 
+def smooth_inputs() -> None:
+    ap = argparse.ArgumentParser(prog="smooth-inputs", description="Elitist evolution-strategy fine-tune of the practice winner on lap time plus slide time")
+    ap.add_argument("--track", default="spielberg", choices=fevo.track_ids())
+    ap.add_argument("--baseline", help="agent file to start from (default winners/practice-<track>.json; never overwritten)")
+    ap.add_argument("-g", "--generations", type=int, default=1000)
+    ap.add_argument("--sigma", type=float, default=0.0005)
+    ap.add_argument("--popsize", type=int, default=36)
+    ap.add_argument("--slide", type=float, default=0.3, help="score per second of lock-up or wheelspin per lap")
+    ap.add_argument("--slower", type=float, default=5.0, help="extra score per second slower than the baseline lap")
+    ap.add_argument("-w", "--workers", type=int)
+    ap.add_argument("--fresh", action="store_true", help="ignore the saved search state")
+    ap.add_argument("--seed", type=int, default=1)
+    a = ap.parse_args()
+    from .smooth import smooth
+
+    smooth(a.track, a.baseline, a.generations, a.sigma, a.popsize, a.slide, a.slower, a.workers, a.seed, a.fresh)
+
+
 def _winner(track: str, path: str | None) -> Path:
     if path:
         return Path(path)
