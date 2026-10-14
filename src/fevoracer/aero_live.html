@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fevo aero lab</title>
+<style>
+  :root {
+    --bg: #f5f4ef; --panel: #ffffff; --fg: #1f1e1d; --muted: #6b6a68; --line: #e3e1da;
+    --grass: #e9eadf; --asphalt: #3b3b3e; --edge: #ffffff; --gate: rgba(127,178,255,.35);
+    --start: #e5484d; --accent: #2563eb; --trail: rgba(37,99,235,.55);
+    --throttle: #16a34a; --brake: #dc2626; --steer: #7c3aed; --warn: #c2410c; --ok: #15803d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141413; --panel: #1e1e1d; --fg: #ecebe8; --muted: #9b9a97; --line: #2e2e2c;
+      --grass: #1b1d18; --asphalt: #4a4a4f; --trail: rgba(96,165,250,.6); --warn: #fb923c; --ok: #4ade80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  select, button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1fr 340px; gap: 16px; padding: 16px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .panel h2 { font-size: 13px; font-weight: 600; margin: 0; padding: 10px 12px 0; }
+  #main { display: block; width: 100%; height: min(64vh, 680px); background: var(--grass); }
+  #map { display: block; width: 100%; aspect-ratio: 1.3; }
+  .side { display: flex; flex-direction: column; gap: 16px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
+  .stat .k { color: var(--muted); font-size: 12px; } .stat .v { font-size: 22px; font-variant-numeric: tabular-nums; }
+  .stat .v.small { font-size: 15px; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; position: relative; overflow: hidden; }
+  .bar i { position: absolute; top: 0; bottom: 0; }
+  .sliders { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+  .slider label { display: flex; justify-content: space-between; font-size: 13px; }
+  .slider label b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .slider .sub { color: var(--muted); font-size: 12px; }
+  .slider input { width: 100%; }
+  .changed b { color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+  td, th { padding: 4px 12px; text-align: left; border-top: 1px solid var(--line); } th { color: var(--muted); font-weight: 500; }
+  td.bad { color: var(--warn); } td.good { color: var(--ok); }
+  .hint { color: var(--muted); font-size: 12px; padding: 0 12px 12px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  #status { font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>fevo aero lab</h1>
+  <span class="hint" id="who" style="padding:0"></span>
+  <label class="row">Start <select id="seed"></select></label>
+  <button class="primary" id="play">Pause</button>
+  <button id="restart">Restart lap</button>
+  <button id="stock">Stock aero</button>
+  <label class="row">Speed <select id="rate"><option>0.5</option><option selected>1</option><option>2</option><option>4</option><option>8</option></select>×</label>
+  <label class="row">Zoom <input type="range" id="zoom" min="1" max="12" step="0.5" value="5"></label>
+</header>
+<div class="grid">
+  <div class="side">
+    <div class="panel"><canvas id="main"></canvas></div>
+    <div class="panel">
+      <h2>Laps this session</h2>
+      <table><thead><tr><th>#</th><th>Start</th><th>Result</th><th>Downforce</th><th>Drag</th><th>Front bal.</th><th>Aero changed mid-lap</th></tr></thead><tbody id="laps"></tbody></table>
+      <div class="hint" id="stocknote"></div>
+    </div>
+  </div>
+  <div class="side">
+    <div class="panel">
+      <div class="stats">
+        <div class="stat"><div class="k">Lap time</div><div class="v" id="time">0:00.00</div></div>
+        <div class="stat"><div class="k">Speed</div><div class="v" id="speed">0 km/h</div></div>
+        <div class="stat"><div class="k">Gate</div><div class="v" id="gate">0 / 0</div></div>
+        <div class="stat"><div class="k">Status</div><div class="v small" id="status">running</div></div>
+        <div class="stat"><div class="k">Downforce now</div><div class="v small" id="dfN">0 N</div></div>
+        <div class="stat"><div class="k">Drag now</div><div class="v small" id="drN">0 N</div></div>
+        <div class="stat" style="grid-column: span 2"><div class="k">Tyres</div><div class="v small" id="tyres">gripping</div></div>
+      </div>
+      <div style="padding:0 12px 12px; display:grid; gap:6px">
+        <div class="k hint" style="padding:0">Throttle | brake</div><div class="bar"><i id="thrBar"></i></div>
+        <div class="k hint" style="padding:0">Steer (left − / right +)</div><div class="bar"><i id="steerBar"></i></div>
+        <div class="k hint" style="padding:0">Rear slide (wheelspin or lock-up)</div><div class="bar"><i id="rsBar"></i></div>
+        <div class="k hint" style="padding:0">Front slide (lock-up)</div><div class="bar"><i id="fsBar"></i></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Aero (applies instantly, mid-lap)</h2>
+      <div class="sliders" id="sliders"></div>
+      <div class="hint">The driver network was trained with the stock aero. Big changes move the braking points and corner speeds it learned, so it may run wide or spin: that's the point of the experiment, not a bug.</div>
+    </div>
+    <div class="panel"><canvas id="map"></canvas></div>
+  </div>
+</div>
+<script>
+const DATA = /*__DATA__*/null;
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const HZ = DATA.rules.agentHz, T = DATA.track, n = T.widthLeft.length;
+
+// ---------- the simulator: the exact sim.wasm, driven through its scratch buffers like the Python SDK ----------
+let ex, f64p, i32p;
+function readStr(ptr) {
+  if (!ptr) return "";
+  const len = new Uint32Array(ex.memory.buffer, ptr - 4, 1)[0];
+  return String.fromCharCode(...new Uint16Array(ex.memory.buffer, ptr, len / 2));
+}
+const writeF64 = (vals) => new Float64Array(ex.memory.buffer, f64p, vals.length).set(vals);
+const writeI32 = (vals) => new Int32Array(ex.memory.buffer, i32p, vals.length).set(vals);
+
+const ORDER = DATA.rules.carParamOrder;
+const STOCK = Object.fromEntries(ORDER.map((k, i) => [k, DATA.car[i]]));
+const aero = { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront };
+function applyCar() {
+  writeF64(ORDER.map((k) => (k in aero ? aero[k] : STOCK[k])));
+  ex.setCarParamsFromScratch(ORDER.length);
+}
+
+async function boot() {
+  const bytes = Uint8Array.from(atob(DATA.wasm), (c) => c.charCodeAt(0));
+  const { instance } = await WebAssembly.instantiate(bytes, {
+    env: { abort(msg, file, line, col) { throw new Error(`simulator assert failed: ${readStr(msg)} (${readStr(file)}:${line}:${col})`); } },
+  });
+  ex = instance.exports;
+  f64p = ex.scratchF64(); i32p = ex.scratchI32();
+  const R = DATA.rules;
+  applyCar();
+  ex.setRearSlideModel(R.rearSlide[0], R.rearSlide[1]);
+  ex.setTiming(R.agentHz, R.physicsSubsteps);
+  ex.setLimits(R.maxSteps, R.stopSpeedMps, R.stopSteps);
+  ex.setSensors(R.rayCount, R.rayLengthM, R.rayFovRad, R.speedNormMps);
+  ex.setSpeedLimit(0);
+  writeF64([...T.centerline, ...T.widthLeft, ...T.widthRight]); writeI32(T.gates);
+  ex.loadTrackFromScratch(n, T.gates.length);
+  const P = DATA.program;
+  writeI32([...P.io, ...P.nodeInts, ...P.linkSlots]); writeF64([...P.nodeFloats, ...P.linkWeights]);
+  ex.loadAgentFromScratch(P.slotCount, P.io.length, P.nodeInts.length / 5, P.linkSlots.length);
+}
+
+// ---------- geometry (as the replay viewer) ----------
+const g = (() => {
+  const c = T.centerline, left = new Path2D(), right = new Path2D(), L = [], Rr = [];
+  for (let i = 0; i < n; i++) {
+    const p = (i - 1 + n) % n, q = (i + 1) % n;
+    const tx = c[2*q] - c[2*p], ty = c[2*q+1] - c[2*p+1], len = Math.hypot(tx, ty);
+    const nx = -ty / len, ny = tx / len, x = c[2*i], y = c[2*i+1];
+    L.push([x + nx * T.widthLeft[i], y + ny * T.widthLeft[i]]);
+    Rr.push([x - nx * T.widthRight[i], y - ny * T.widthRight[i]]);
+  }
+  L.forEach(([x, y], i) => i ? left.lineTo(x, y) : left.moveTo(x, y)); left.closePath();
+  Rr.forEach(([x, y], i) => i ? right.lineTo(x, y) : right.moveTo(x, y)); right.closePath();
+  const surface = new Path2D(); surface.addPath(left); surface.addPath(right);
+  const gates = new Path2D();
+  for (const k of T.gates) { gates.moveTo(...L[k]); gates.lineTo(...Rr[k]); }
+  const start = new Path2D(); start.moveTo(...L[T.gates[0]]); start.lineTo(...Rr[T.gates[0]]);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of [...L, ...Rr]) { minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); }
+  return { left, right, surface, gates, start, bounds: { minX, minY, maxX, maxY } };
+})();
+
+const LOCK = "#8fd0ff", SPIN = "#ff8a3d";
+const WHEELS = { front: [[1.6, 0.74], [1.6, -0.74]], rear: [[-1.75, 0.74], [-1.75, -0.74]] };
+function drawCar(ctx, colors, ts) {
+  const Lh = DATA.rules.car.length / 2, Wh = DATA.rules.car.width / 2;
+  if (ts.f > 0 || ts.r > 0) {
+    for (const [axle, k] of [["front", ts.f], ["rear", ts.r]]) {
+      if (k <= 0) continue;
+      for (const [wx, wy] of WHEELS[axle]) for (let j = 1; j <= 4; j++) {
+        ctx.beginPath(); ctx.arc(wx - j * 0.7, wy, 0.35 + 0.25 * j * k, 0, 2 * Math.PI);
+        ctx.fillStyle = `rgba(235,240,245,${(0.35 * k / j).toFixed(3)})`; ctx.fill();
+      }
+    }
+  }
+  for (const [x0, x1, axle] of [[-2.15, -1.35, "rear"], [1.25, 1.95, "front"]]) for (const s of [-1, 1]) {
+    const k = axle === "front" ? ts.f : ts.r;
+    ctx.fillStyle = k > 0 ? (axle === "front" ? LOCK : ts.rearColor) : "#111";
+    ctx.fillRect(x0, s > 0 ? Wh - 0.42 : -Wh, x1 - x0, 0.42);
+  }
+  ctx.fillStyle = colors.secondary;
+  ctx.fillRect(-Lh, -0.78, 0.38, 1.56); ctx.fillRect(Lh - 0.32, -Wh + 0.05, 0.32, 2 * Wh - 0.1);
+  ctx.fillStyle = colors.primary;
+  ctx.beginPath();
+  const pts = [[Lh - 0.2, 0.1], [1.3, 0.2], [0.7, 0.42], [-0.2, 0.62], [-1.2, 0.55], [-2.25, 0.28]];
+  ctx.moveTo(Lh - 0.05, 0);
+  for (const [x, y] of pts) ctx.lineTo(x, y);
+  for (const [x, y] of pts.slice().reverse()) ctx.lineTo(x, -y);
+  ctx.closePath(); ctx.fill();
+  ctx.lineWidth = 0.07; ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.stroke();
+  ctx.fillStyle = colors.accent; ctx.fillRect(-1.6, -0.08, 3.4, 0.16);
+  ctx.fillStyle = "#0b0b0b"; ctx.beginPath(); ctx.ellipse(0.2, 0, 0.42, 0.24, 0, 0, 2 * Math.PI); ctx.fill();
+}
+function fit(cv) {
+  const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1;
+  if (cv.width !== Math.round(r.width * d) || cv.height !== Math.round(r.height * d)) { cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); }
+  return d;
+}
+
+// ---------- the live lap ----------
+const STATUS = ["running", "finished", "crashed", "stopped", "error", "timed-out"];
+let state, trail, skids, lapNo = 0, playing = true, carry = 0, last = performance.now();
+const history = [];
+function fmtTime(steps) {
+  const cs = Math.round((steps / HZ) * 100);
+  return `${Math.floor(cs / 6000)}:${String(((cs % 6000) / 100).toFixed(2)).padStart(5, "0")}`;
+}
+const isStock = () => Object.keys(aero).every((k) => aero[k] === STOCK[k]);
+function restart() {
+  const s = DATA.seeds[Number($("seed").value)];
+  ex.resetAtStart(s.lateralM, s.headingRad, DATA.rules.initialSpeedMps);
+  state = { status: "running", changed: false, startAero: { ...aero }, startedStock: isStock() };
+  trail = []; skids = [];
+  lapNo++;
+  read();
+}
+function read() {
+  state.x = ex.getX(); state.y = ex.getY(); state.yaw = ex.getYaw(); state.vx = ex.getVx();
+  state.steps = ex.getSteps(); state.gates = ex.getGatesPassed();
+  state.steer = Math.max(-1, Math.min(1, ex.getAgentSteer())); state.thr = Math.max(-1, Math.min(1, ex.getAgentThrottle()));
+  state.fs = ex.getFrontSlide(); state.rs = ex.getRearSlide();
+}
+function step() {
+  const code = ex.agentStep();
+  read();
+  trail.push([state.x, state.y]); if (trail.length > 6 * HZ) trail.shift();
+  if (state.fs > 0 || state.rs > 0) { skids.push([state.x, state.y, state.yaw, state.fs, state.rs]); if (skids.length > 1200) skids.shift(); }
+  if (code !== 0) {
+    state.status = STATUS[code] || "error";
+    history.unshift({ no: lapNo, seed: Number($("seed").value), status: state.status, steps: state.steps, gates: state.gates,
+                      aero: { ...aero }, changed: state.changed, stock: state.startedStock && !state.changed });
+    renderLaps();
+    // Next lap starts automatically after a short pause, with whatever aero is set now.
+    setTimeout(() => { if (state.status !== "running") restart(); }, 1600);
+  }
+}
+
+// ---------- sliders ----------
+const SLIDERS = [
+  { key: "downforceAreaM2", label: "Downforce (CL·A)", min: 0.5, max: 1.5, step: 0.01, rel: true, unit: "m²",
+    sub: "Grip grows with downforce × speed². More means faster corners and shorter braking at speed; drag is a separate slider here." },
+  { key: "dragAreaM2", label: "Drag (CD·A)", min: 0.5, max: 1.5, step: 0.01, rel: true, unit: "m²",
+    sub: "Air resistance: sets top speed and how fast the car accelerates at speed. Less drag also means less braking from the air." },
+  { key: "aeroBalanceFront", label: "Aero balance (front share)", min: 0.35, max: 0.6, step: 0.005, rel: false, unit: "",
+    sub: "Share of downforce on the front axle. More front: sharper turn-in, lighter rear (oversteer, power slides). Less: understeer." },
+];
+function renderSliders() {
+  $("sliders").innerHTML = "";
+  for (const s of SLIDERS) {
+    const stock = STOCK[s.key], val = aero[s.key];
+    const pos = s.rel ? val / stock : val;
+    const div = document.createElement("div");
+    div.className = "slider" + (Math.abs(val - stock) > 1e-9 ? " changed" : "");
+    const shown = s.rel ? `${val.toFixed(2)} ${s.unit} (${Math.round(100 * pos)}%)` : `${(100 * val).toFixed(1)}% front`;
+    const stockShown = s.rel ? `${stock.toFixed(2)} ${s.unit}` : `${(100 * stock).toFixed(1)}%`;
+    div.innerHTML = `<label><span>${s.label}</span><b>${shown}</b></label>
+      <input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${pos}" aria-label="${s.label}">
+      <div class="sub">Stock ${stockShown}. ${s.sub}</div>`;
+    div.querySelector("input").addEventListener("input", (e) => {
+      const v = Number(e.target.value);
+      aero[s.key] = s.rel ? v * stock : v;
+      applyCar();
+      if (state && state.status === "running") state.changed = true;
+      renderSliders.pending = true;
+    });
+    $("sliders").appendChild(div);
+  }
+}
+function syncSliderLabels() {
+  // Update labels without rebuilding the inputs (rebuilding would drop the drag in progress).
+  [...$("sliders").children].forEach((div, i) => {
+    const s = SLIDERS[i], stock = STOCK[s.key], val = aero[s.key];
+    div.className = "slider" + (Math.abs(val - stock) > 1e-9 ? " changed" : "");
+    div.querySelector("b").textContent = s.rel ? `${val.toFixed(2)} ${s.unit} (${Math.round((100 * val) / stock)}%)` : `${(100 * val).toFixed(1)}% front`;
+    const inp = div.querySelector("input"); const pos = s.rel ? val / stock : val;
+    if (document.activeElement !== inp) inp.value = pos;
+  });
+}
+function renderLaps() {
+  $("laps").innerHTML = history.slice(0, 12).map((h) => {
+    const res = h.status === "finished" ? fmtTime(h.steps) : `${h.status} at gate ${h.gates}/${T.gates.length}`;
+    return `<tr><td>${h.no}</td><td>${h.seed}</td><td class="${h.status === "finished" ? "good" : "bad"}">${res}${h.stock ? " (stock)" : ""}</td>
+      <td>${Math.round((100 * h.aero.downforceAreaM2) / STOCK.downforceAreaM2)}%</td><td>${Math.round((100 * h.aero.dragAreaM2) / STOCK.dragAreaM2)}%</td>
+      <td>${(100 * h.aero.aeroBalanceFront).toFixed(1)}%</td><td>${h.changed ? "yes" : "no"}</td></tr>`;
+  }).join("");
+}
+
+// ---------- drawing ----------
+function drawMain() {
+  const cv = $("main"), ctx = cv.getContext("2d"), d = fit(cv);
+  const W = cv.width, H = cv.height, zoom = Number($("zoom").value) * d;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = css("--grass"); ctx.fillRect(0, 0, W, H);
+  ctx.setTransform(zoom, 0, 0, -zoom, W / 2 - state.x * zoom, H / 2 + state.y * zoom);
+  ctx.fillStyle = css("--asphalt"); ctx.fill(g.surface, "evenodd");
+  ctx.lineWidth = 0.3; ctx.strokeStyle = css("--edge"); ctx.stroke(g.left); ctx.stroke(g.right);
+  ctx.lineWidth = 0.15; ctx.strokeStyle = css("--gate"); ctx.stroke(g.gates);
+  ctx.lineWidth = 0.6; ctx.strokeStyle = css("--start"); ctx.stroke(g.start);
+  for (const [x, y, yaw, kf, kr] of skids) for (const [axle, k] of [["front", kf], ["rear", kr]]) {
+    if (k <= 0) continue;
+    ctx.fillStyle = `rgba(10,10,12,${(0.2 + 0.45 * k).toFixed(2)})`;
+    for (const [wx, wy] of WHEELS[axle]) ctx.fillRect(x + Math.cos(yaw) * wx - Math.sin(yaw) * wy - 0.15, y + Math.sin(yaw) * wx + Math.cos(yaw) * wy - 0.15, 0.3, 0.3);
+  }
+  ctx.beginPath(); trail.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.strokeStyle = css("--trail"); ctx.lineWidth = 0.35; ctx.stroke();
+  const braking = state.thr < 0;
+  ctx.save(); ctx.translate(state.x, state.y); ctx.rotate(state.yaw);
+  drawCar(ctx, DATA.colors, { f: state.fs, r: state.rs, rearColor: braking ? LOCK : SPIN }); ctx.restore();
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  const px = 20 * zoom / d; ctx.fillStyle = css("--fg"); ctx.fillRect(16, H / d - 20, px, 2);
+  ctx.font = "12px system-ui"; ctx.fillText("20 m", 16, H / d - 26);
+  if (state.status !== "running") {
+    ctx.font = "600 22px system-ui"; ctx.fillStyle = state.status === "finished" ? css("--ok") : css("--warn");
+    ctx.fillText(state.status === "finished" ? `Finished ${fmtTime(state.steps)}` : `${state.status.toUpperCase()} at gate ${state.gates}`, 16, 34);
+  }
+}
+function drawMap() {
+  const cv = $("map"), ctx = cv.getContext("2d"), d = fit(cv);
+  const W = cv.width, H = cv.height, b = g.bounds, pad = 12 * d;
+  const s = Math.min((W - 2 * pad) / (b.maxX - b.minX), (H - 2 * pad) / (b.maxY - b.minY));
+  const ox = (W - (b.maxX - b.minX) * s) / 2 - b.minX * s, oy = (H + (b.maxY - b.minY) * s) / 2 + b.minY * s;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
+  ctx.setTransform(s, 0, 0, -s, ox, oy);
+  ctx.fillStyle = css("--asphalt"); ctx.fill(g.surface, "evenodd");
+  ctx.lineWidth = 2 / s * d; ctx.strokeStyle = css("--start"); ctx.stroke(g.start);
+  ctx.fillStyle = DATA.colors.primary; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5 * d / s;
+  ctx.beginPath(); ctx.arc(state.x, state.y, 5 * d / s, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+}
+function hud() {
+  $("time").textContent = fmtTime(state.steps);
+  $("speed").textContent = `${Math.round(state.vx * 3.6)} km/h`;
+  $("gate").textContent = `${state.gates} / ${T.gates.length}`;
+  $("status").textContent = state.status; $("status").style.color = state.status === "running" ? "" : state.status === "finished" ? css("--ok") : css("--warn");
+  const q = 0.5 * STOCK.airDensityKgM3 * state.vx * state.vx;
+  $("dfN").textContent = `${(q * aero.downforceAreaM2 / 1000).toFixed(1)} kN (${(q * aero.downforceAreaM2 / (STOCK.massKg * STOCK.gravityMps2)).toFixed(2)}× weight)`;
+  $("drN").textContent = `${(q * aero.dragAreaM2 / 1000).toFixed(1)} kN`;
+  const braking = state.thr < 0;
+  $("tyres").textContent = state.fs > 0 && state.rs > 0 ? (braking ? "LOCK-UP: ALL FOUR" : "LOCK-UP + WHEELSPIN")
+    : state.fs > 0 ? "FRONT LOCK-UP" : state.rs > 0 ? (braking ? "REAR LOCK-UP" : "WHEELSPIN / POWER SLIDE") : "gripping";
+  $("tyres").style.color = state.fs > 0 || state.rs > 0 ? css("--warn") : "";
+  const t = state.thr, sb = $("thrBar"), st = $("steerBar");
+  sb.style.left = t >= 0 ? "50%" : `${50 + 50 * t}%`; sb.style.width = `${50 * Math.abs(t)}%`; sb.style.background = t >= 0 ? css("--throttle") : css("--brake");
+  st.style.left = state.steer >= 0 ? "50%" : `${50 + 50 * state.steer}%`; st.style.width = `${50 * Math.abs(state.steer)}%`; st.style.background = css("--steer");
+  for (const [id, k] of [["rsBar", state.rs], ["fsBar", state.fs]]) { const e = $(id); e.style.left = "0"; e.style.width = `${100 * k}%`; e.style.background = css("--warn"); }
+  if (renderSliders.pending) { syncSliderLabels(); renderSliders.pending = false; }
+}
+function tick(now) {
+  // Keep real time even when the browser drops frames (background tabs); cap so a long pause doesn't fast-forward.
+  const dt = Math.min(0.5, (now - last) / 1000); last = now;
+  if (playing && state.status === "running") {
+    carry += dt * HZ * Number($("rate").value);
+    let k = Math.floor(carry); carry -= k;
+    while (k-- > 0 && state.status === "running") step();
+  }
+  drawMain(); drawMap(); hud();
+  requestAnimationFrame(tick);
+}
+
+// ---------- start ----------
+boot().then(() => {
+  DATA.seeds.forEach((_, i) => $("seed").add(new Option(String(i), String(i))));
+  $("seed").value = "1";
+  $("who").textContent = `${DATA.agent} · ${DATA.trackName} · rules ${DATA.rules.id}`;
+  $("stocknote").textContent = `Official ${DATA.rules.id} laps of this driver at stock aero: ${DATA.official.map((l) => (l.finished ? fmtTime(l.steps) : l.status)).join(" / ")} (starts 0 / 1 / 2). A stock lap here should match exactly: same wasm, same numbers.`;
+  renderSliders();
+  restart();
+  $("play").onclick = () => { playing = !playing; $("play").textContent = playing ? "Pause" : "Play"; };
+  $("restart").onclick = () => restart();
+  $("seed").onchange = () => restart();
+  $("stock").onclick = () => { Object.assign(aero, { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront }); applyCar(); if (state.status === "running") state.changed = true; renderSliders.pending = true; };
+  addEventListener("keydown", (e) => { if (e.key === " " && e.target === document.body) { e.preventDefault(); $("play").click(); } if (e.key === "r") restart(); });
+  window.__aero = { aero, STOCK, applyCar, restart, step, state: () => state, history };  // for automated checks
+  requestAnimationFrame((t) => { last = t; tick(t); });
+}).catch((e) => { document.body.insertAdjacentHTML("afterbegin", `<pre style="color:#c00;padding:16px">${e.stack || e}</pre>`); throw e; });
+</script>
+</body>
+</html>
