@@ -95,14 +95,18 @@ def rollout(sim: fevo.Simulator, expert: LineExpert, student: Student | None, st
     return xs, ys, fevo.sim.STATUS[code], sim.progress_index
 
 
-def fit(student: Student, X: np.ndarray, Y: np.ndarray, steps: int, lr: float, steer_weight: float, batch: int = 1024) -> float:
-    """`steps` minibatch updates (Adam, learning rate decayed tenfold by the end); returns the full-data loss."""
+def fit(student: Student, X: np.ndarray, Y: np.ndarray, steps: int, lr: float, steer_weight: float, batch: int = 1024,
+        sample_weight: np.ndarray | None = None) -> float:
+    """`steps` minibatch updates (Adam, learning rate decayed tenfold by the end); returns the full-data loss.
+
+    sample_weight draws states in proportion to it (e.g. more braking zones) instead of uniformly."""
     opt = torch.optim.Adam(student.parameters(), lr=lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps, eta_min=lr / 10)
     Xt, Yt = torch.as_tensor(X), torch.as_tensor(Y)
     w = torch.tensor([steer_weight, 1.0])
+    sw = None if sample_weight is None else torch.as_tensor(sample_weight, dtype=torch.float32)
     for _ in range(steps):
-        i = torch.randint(len(Xt), (batch,))
+        i = torch.randint(len(Xt), (batch,)) if sw is None else torch.multinomial(sw, batch, replacement=True)
         loss = ((student(Xt[i]) - Yt[i]).pow(2) * w).mean()
         opt.zero_grad()
         loss.backward()

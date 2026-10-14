@@ -41,6 +41,8 @@ from .racer import LineExpert
 RULES = "solo-4"
 #: Inputs a general driver must not use: lap progress by gate (index 12) and by metre (the last, index 32).
 MASKED = (12, 32)
+#: solo-4's next-corner distance input (/ 600 m): under 0.5 means a corner within 300 m.
+NEXT_CORNER = 30
 EXPERT = {"line_scale": 0.9, "look_s": 0.45, "yaw_damp": 0.08, "k_cross": 1.0, "margin": 0.96, "slow_margin": 0.9}
 CAUTIOUS = {**EXPERT, "line_scale": 0.8, "slow_margin": 0.85}
 def _distinct_gen(first: int, count: int) -> list[int]:
@@ -201,14 +203,26 @@ def summarise(res: list[dict], hz: int = 60) -> tuple[str, float]:
     return "  ".join(parts), float(np.mean(prog)) if prog else 0.0
 
 
+def weights(X: np.ndarray, Y: np.ndarray, brake_weight: float) -> np.ndarray:
+    """Braking zones and corner entries are a few percent of a lap: draw them `brake_weight` times as often."""
+    hot = (Y[:, 1] < -0.05) | (X[:, NEXT_CORNER] < 0.5)
+    return np.where(hot, brake_weight, 1.0).astype(np.float32)
+
+
 def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, practice: int, stint: int, hidden: list[int],
-          steps: int, lr: float, workers: int | None, seed: int, setup_from: str) -> None:
+          steps: int, lr: float, workers: int | None, seed: int, setup_from: str, init: str | None = None,
+          start_round: int = 0, brake_weight: float = 1.0) -> None:
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     rules = fevo.load_rules(RULES)
     setup_d = json.load(open(setup_from))["setup"]
     setup = [setup_d[k["id"]] for k in rules.setup]
-    student = masked_student(hidden)
+    if init:
+        student = Student.from_mlp(json.load(open(init)))
+        _hold_mask(student)
+        hidden = [m.out_features for m in student.net if isinstance(m, torch.nn.Linear)][:-1]
+    else:
+        student = masked_student(hidden)
     real_train = [n for n in realtracks.names("train") if n not in EXCLUDE_REAL]
     held = [f"gen:{s}" for s in HELDOUT_GEN] + realtracks.names("test") + ["spielberg"]
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
@@ -216,7 +230,8 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
     Y: list[np.ndarray] = []
     best, out = -1.0, WINNERS / f"{name}.json"
     t0 = time.time()
-    print(f"General driver on {RULES}: student {[len(rules.observation), *hidden, 2]} with inputs {MASKED} masked; per round {gen_per_round} new "
+    print(f"General driver on {RULES}: student {[len(rules.observation), *hidden, 2]} with inputs {MASKED} masked, braking/corner-entry "
+          f"states drawn x{brake_weight}; per round {gen_per_round} new "
           f"generated + {real_per_round} of {len(real_train)} real training circuits; held out {held}", flush=True)
     with mp.get_context("spawn").Pool(workers, initializer=_init, initargs=(setup,)) as pool:
         base = pool.map(_official, [(h, None, True) for h in held])
@@ -224,7 +239,14 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
         print("expert on held-out tracks: " + "  ".join(
             f"{r['track'].replace('gen:', 'g')} {fevo.format_lap_time(sorted(s for st, s in r['expert'] if st == 'finished')[1]) if sum(st == 'finished' for st, _ in r['expert']) >= 2 else 'fails'}"
             for r in base), flush=True)
-        for r in range(rounds + 1):
+        if init:
+            # The starting network's held-out score is the one to beat: the file is only replaced by a better one.
+            ev0 = pool.map(_official, [(h, student.to_mlp(setup_d), False) for h in held])
+            for e in ev0:
+                e["expert"] = expert_laps[e["track"]]
+            line, best = summarise(ev0)
+            print(f"warm start from {init}: held out {line} | completed {best:.1%}", flush=True)
+        for r in range(start_round, start_round + rounds + 1):
             beta = 1.0 if r == 0 else max(0.0, 0.6 - 0.1 * r)
             specs = [f"gen:{int(s)}" for s in rng.integers(1, 800_000, gen_per_round)] + list(rng.choice(real_train, real_per_round, replace=False))
             mlp = None if r == 0 else student.to_mlp(setup_d)
@@ -236,7 +258,8 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
             while sum(len(x) for x in X) > 3_000_000:
                 X.pop(0)
                 Y.pop(0)
-            loss = fit(student, np.concatenate(X), np.concatenate(Y), steps, lr, 4.0)
+            Xa, Ya = np.concatenate(X), np.concatenate(Y)
+            loss = fit(student, Xa, Ya, steps, lr, 4.0, sample_weight=weights(Xa, Ya, brake_weight) if brake_weight != 1.0 else None)
             _hold_mask(student)
             mlp = student.to_mlp(setup_d)
             ev = pool.map(_official, [(h, mlp, False) for h in held])
@@ -269,11 +292,14 @@ def main() -> None:
     ap.add_argument("--steps", type=int, default=30000)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--setup-from", default="winners/solo3-spielberg.json", help="the car setup the driver uses everywhere")
+    ap.add_argument("--init", help="continue from this general driver (same inputs)")
+    ap.add_argument("--start-round", type=int, default=0, help="round number to start the expert-share schedule at")
+    ap.add_argument("--brake-weight", type=float, default=1.0, help="how much more often braking/corner-entry states are drawn")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     train(a.name, a.rounds, a.gen, a.real, a.practice, a.stint, [int(h) for h in a.hidden.split(",")], a.steps, a.lr,
-          a.workers, a.seed, a.setup_from)
+          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight)
 
 
 if __name__ == "__main__":
