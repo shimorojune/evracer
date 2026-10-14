@@ -49,7 +49,8 @@ class LineExpert:
                  slow_below: float = 30.0, launch_min: float = 0.15, launch_below: float = 20.0,
                  understeer_cut: float = 0.0, observable: bool = False, k_head: float = 1.0, k_e: float = 2.5,
                  ff_look_s: float = 0.1, brake_plan: float = 1.0, line_file: str | None = None,
-                 offsets: np.ndarray | None = None, brake_latch: float = 0.0) -> None:
+                 offsets: np.ndarray | None = None, brake_latch: float = 0.0,
+                 onset_ramp: tuple[float, float] | None = None) -> None:
         self.car = car = rules.car_for(setup)
         # The reference line keeps 1.45 m from the edges (0.5 m outside the car's half width): pull it in a little.
         # line_file swaps in another line's offsets (e.g. the wider solo-3 line from tools/calibrate's racingLine).
@@ -90,6 +91,11 @@ class LineExpert:
         # capacity, braking with exactly the needed force (coasting when none is needed) and never blipping the
         # throttle, so the labels a student learns from change smoothly through a braking zone.
         self.brake_latch = brake_latch
+        # onset_ramp (pre, post) metres, with brake_latch: braking starts gradually, not as a switch. By the signed
+        # distance s to the point where braking must start (positive before it), the pedal blends from the driving
+        # action at s = pre to the braking one at s = -post, where the latch takes over; nearly the same state then
+        # gets nearly the same label, which a squared-error fit can learn instead of averaging a switch into a coast.
+        self.onset_ramp = onset_ramp
         self.braking = False
         self.j = 0
         self.vx_prev = 0.0
@@ -209,17 +215,38 @@ class LineExpert:
         bmax = min(long_f / bias, long_r / (1 - bias), car["maxBrakeForceN"])
         if self.brake_latch > 0:
             cap = bmax + drag
-            if not self.braking and need_dec * m > self.brake_on * cap:
+            blend = 0.0
+            if self.onset_ramp and not self.braking:
+                pre, post = self.onset_ramp
+                vk = self.v[k % self.n]
+                a_on = self.brake_on * cap / m
+                faster = vk < vx
+                sd = float(np.min(d[faster] - (vx * vx - vk[faster] ** 2) / (2 * a_on))) if faster.any() else math.inf
+                if sd < -post:
+                    self.braking = True
+                elif sd < pre:
+                    blend = (pre - sd) / (pre + post)
+            elif not self.braking and need_dec * m > self.brake_on * cap:
                 self.braking = True
             elif self.braking and need_dec * m < self.brake_latch * cap:
                 self.braking = False
             if self.braking:
                 return steer, -min(max(0.0, need_dec * m - drag), bmax) / car["maxBrakeForceN"]
             f_need = m * self.kp * (v_t - vx) + drag
+            if blend > 0:
+                st_, thr = self._drive(steer, f_need, capr, fyr, vx, r, j, bmax, c)
+                brake = -min(max(0.0, need_dec * m - drag), bmax) / car["maxBrakeForceN"]
+                return steer, (1 - blend) * thr + blend * brake
         elif need_dec * m > self.brake_on * (bmax + drag):
             f_need = -(need_dec * m - drag)
         else:
             f_need = m * self.kp * (v_t - vx) + drag
+        return self._drive(steer, f_need, capr, fyr, vx, r, j, bmax, c)
+
+    def _drive(self, steer: float, f_need: float, capr: float, fyr: float, vx: float, r: float, j: int, bmax: float,
+               c) -> tuple[float, float]:
+        """The pedal for a wanted longitudinal force: drive within the rear tyres' margin, or brake."""
+        car = self.car
         if f_need >= 0:
             # Drive keeps its own margin on the rear friction circle, and the rears sliding means lift (solo-2's
             # power slide is caught by closing the throttle, not by easing off).

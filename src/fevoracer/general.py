@@ -45,7 +45,7 @@ MASKED = (12, 32)
 #: solo-4's next-corner distance input (/ 600 m): under 0.5 means a corner within 300 m.
 NEXT_CORNER = 30
 EXPERT = {"line_scale": 0.9, "look_s": 0.45, "yaw_damp": 0.08, "k_cross": 1.0, "margin": 0.96, "slow_margin": 0.9,
-          "brake_latch": 0.3}
+          "brake_latch": 0.3, "onset_ramp": (15.0, 5.0)}
 CAUTIOUS = {**EXPERT, "line_scale": 0.8, "slow_margin": 0.85}
 #: Held-out scoring drives the three official starts plus these (lateral m, heading rad at the start line; the rules
 #: have only three starts, ±0.5 m and centre), so one crash moves the score less.
@@ -253,7 +253,7 @@ def weights(X: np.ndarray, Y: np.ndarray, brake_weight: float) -> np.ndarray:
 def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, practice: int, stint: int, hidden: list[int],
           steps: int, lr: float, workers: int | None, seed: int, setup_from: str, init: str | None = None,
           start_round: int = 0, brake_weight: float = 1.0, brake_starts: float = 0.0, expert_share: float = 0.0,
-          seed_rounds: int = 0, data: str | None = None, slow_share: float = 0.0) -> None:
+          seed_rounds: int = 0, data: str | None = None, slow_share: float = 0.0, data_last: int = 0) -> None:
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     rules = fevo.load_rules(RULES)
@@ -272,8 +272,10 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
     Y: list[np.ndarray] = []
     if data:
         # A previous run's kept states (checkpoints/<name>-data.npz), so a restart does not start from an empty buffer.
+        # Split into chunks so the size cap below drops the oldest states gradually, not all of them at once.
         with np.load(data) as d:
-            X, Y = [d["X"]], [d["Y"]]
+            keep = slice(-data_last, None) if data_last else slice(None)
+            X, Y = list(np.array_split(d["X"][keep], 20)), list(np.array_split(d["Y"][keep], 20))
     best, out = -1.0, WINNERS / f"{name}.json"
     t0 = time.time()
     print(f"General driver on {RULES}: student {[len(rules.observation), *hidden, 2]} with inputs {MASKED} masked, braking/corner-entry "
@@ -359,12 +361,13 @@ def main() -> None:
     ap.add_argument("--expert-share", type=float, default=0.0, help="share of runs driven entirely by the expert in every round")
     ap.add_argument("--seed-rounds", type=int, default=0, help="expert-only data rounds before the schedule when continuing (--init)")
     ap.add_argument("--slow-share", type=float, default=0.0, help="share of the generated circuits with hairpins and sidestep chicanes")
+    ap.add_argument("--data-last", type=int, default=0, help="with --data, keep only the most recent N states")
     ap.add_argument("--data", help="start with the kept states a previous run saved (checkpoints/<name>-data.npz)")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     train(a.name, a.rounds, a.gen, a.real, a.practice, a.stint, [int(h) for h in a.hidden.split(",")], a.steps, a.lr,
-          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds, a.data, a.slow_share)
+          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds, a.data, a.slow_share, a.data_last)
 
 
 if __name__ == "__main__":
