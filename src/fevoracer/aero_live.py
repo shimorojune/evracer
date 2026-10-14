@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import math
 from importlib import resources
 from pathlib import Path
 
@@ -24,15 +25,31 @@ from fevo._wasm import wasm_bytes
 MS = 24  # mini sectors, as the replay viewer
 
 
-def ms_ends(gates: list[int], steps: int, status: str, gate_count: int) -> list[int]:
-    """Step at which each completed mini sector ends (same rule as the viewer's msEnds)."""
-    bounds = [round((i + 1) * gate_count / MS) for i in range(MS - 1)]
-    ends: list[int] = []
-    for j, g in enumerate(gates):
-        while len(ends) < len(bounds) and g >= bounds[len(ends)]:
-            ends.append(j)
+def cross_fraction(track: fevo.Track, gi: int, x0: float, y0: float, x1: float, y1: float) -> float:
+    """Fraction of a step at which the car crossed gate gi: the simulator counts a gate once the nearest centre-line
+    point reaches it, i.e. on the line across the track halfway between point gi - 1 and point gi."""
+    c, n = track.raw["centerline"], track.points
+    a = (gi - 1) % n
+    tx, ty = c[2 * gi] - c[2 * a], c[2 * gi + 1] - c[2 * a + 1]
+    ln = math.hypot(tx, ty)
+    tx, ty = tx / ln, ty / ln
+    mx, my = (c[2 * a] + c[2 * gi]) / 2, (c[2 * a + 1] + c[2 * gi + 1]) / 2
+    s0 = (x0 - mx) * tx + (y0 - my) * ty
+    s1 = (x1 - mx) * tx + (y1 - my) * ty
+    return min(1.0, max(0.0, -s0 / (s1 - s0))) if s1 > s0 else 1.0
+
+
+def ms_ends(trace: dict, steps: int, status: str, track: fevo.Track) -> list[float]:
+    """Time (steps, fractional) at which each completed mini sector ends: the viewer's msEnds, within-step timed."""
+    bounds = [math.floor((i + 1) * len(track.gates) / MS + 0.5) for i in range(MS - 1)]  # JS Math.round, not round-half-even
+    g, x, y = trace["gates"], trace["x"], trace["y"]
+    ends: list[float] = []
+    for j in range(1, len(g)):
+        while len(ends) < len(bounds) and g[j] >= bounds[len(ends)]:
+            gi = track.gates[bounds[len(ends)]]
+            ends.append(j - 1 + cross_fraction(track, gi, x[j - 1], y[j - 1], x[j], y[j]))
     if status == "finished" and len(ends) == len(bounds):
-        ends.append(steps)
+        ends.append(float(steps))
     return ends
 
 
@@ -43,11 +60,10 @@ def rules_option(program: fevo.Program, track_id: str, rules_id: str) -> dict:
     sim.load_track(track_id)
     sim.load_program(program)
     laps = [sim.run_lap(s, trace=True) for s in range(len(rules.seeds))]
-    gate_count = len(sim.track.gates)
     return {
         "id": rules.id, "rearSlide": list(rules.rear_slide), "trackLimits": rules.track_limits,
         "official": [{"seed": l.seed, "status": l.status, "steps": l.steps, "finished": l.finished,
-                      "msEnds": ms_ends(l.trace["gates"], l.steps, l.status, gate_count)} for l in laps],
+                      "msEnds": ms_ends(l.trace, l.steps, l.status, sim.track)} for l in laps],
     }
 
 

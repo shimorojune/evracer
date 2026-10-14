@@ -98,7 +98,7 @@
         <div class="k hint" style="padding:0">Front slide (lock-up)</div><div class="bar"><i id="fsBar"></i></div>
       </div>
       <div class="msbox">
-        <div class="hint" style="padding:0">Mini sectors: <span style="color:var(--ms-purple)">purple</span> fastest of any lap on the page (this session and the official stock laps), <span style="color:var(--ms-green)">green</span> this session's best, <span style="color:var(--ms-yellow)">yellow</span> slower than it</div>
+        <div class="hint" style="padding:0">Mini sectors: <span style="color:var(--ms-purple)">purple</span> faster than every lap before it on this page (this session and the official stock laps), <span style="color:var(--ms-green)">green</span> faster than this session's best so far, <span style="color:var(--ms-yellow)">yellow</span> otherwise (a tie is not an improvement)</div>
         <div class="ms" id="ms"></div>
         <div class="sectors" id="sectors"></div>
       </div>
@@ -185,7 +185,20 @@ const msPaths = (() => {
   const c = T.centerline, a0 = [T.gates[0], ...BOUNDS.map((k) => T.gates[k])], a1 = [...BOUNDS.map((k) => T.gates[k]), T.gates[0] + n];
   return a0.map((a, k) => { const p = new Path2D(); for (let i = a; i <= a1[k]; i++) { const q = i % n; i === a ? p.moveTo(c[2*q], c[2*q+1]) : p.lineTo(c[2*q], c[2*q+1]); } return p; });
 })();
-const msColour = (t, overall, personal) => (t <= overall ? "purple" : t <= personal ? "green" : "yellow");
+// As in F1, matching a time is not an improvement: purple only when strictly faster than every lap before it on
+// the page (the official stock laps and this session), green only when strictly faster than this session's
+// best before it, otherwise yellow.
+const msColour = (t, overall, personal) => (t < overall ? "purple" : t < personal ? "green" : "yellow");
+/** Fraction of the last step at which the car crossed the line across the track at centre-line point gi. */
+// The simulator counts a gate once the car's nearest centre-line point reaches it: on the line across the track
+// halfway between point gi - 1 and point gi.
+function crossFraction(gi, x0, y0, x1, y1) {
+  const c = T.centerline, a = (gi - 1 + n) % n;
+  let tx = c[2*gi] - c[2*a], ty = c[2*gi+1] - c[2*a+1]; const len = Math.hypot(tx, ty); tx /= len; ty /= len;
+  const mx = (c[2*a] + c[2*gi]) / 2, my = (c[2*a+1] + c[2*gi+1]) / 2;
+  const s0 = (x0 - mx) * tx + (y0 - my) * ty, s1 = (x1 - mx) * tx + (y1 - my) * ty;
+  return s1 > s0 ? Math.min(1, Math.max(0, -s0 / (s1 - s0))) : 1;
+}
 const timesOf = (ends) => ends.map((e, k) => e - (k ? ends[k - 1] : 0));
 const sectorsOf = (t) => [0, 1, 2].map((s) => (t.length >= (s + 1) * MS_PER_SECTOR ? t.slice(s * MS_PER_SECTOR, (s + 1) * MS_PER_SECTOR).reduce((a, b) => a + b, 0) : null));
 // Per rules version: the official stock laps' bests (the "other drivers" on the page) and this session's bests.
@@ -199,12 +212,13 @@ let RULES = DATA.rulesOptions.find((o) => o.id === DATA.rules.id);
 function completeMini(endStep) {
   const k = state.msEnds.length, t = endStep - (k ? state.msEnds[k - 1] : 0), b = BEST[state.rules];
   state.msEnds.push(endStep); state.msTimes.push(t);
+  // Colour against the bests as they stood before this lap, then record it (frozen when set, as F1 timing screens).
+  state.msCols.push(msColour(t, Math.min(b.ref.all[k], b.mine.all[k]), b.mine.all[k]));
   b.mine.all[k] = Math.min(b.mine.all[k], t);
-  state.msCols.push(msColour(t, Math.min(b.ref.all[k], b.mine.all[k]), b.mine.all[k]));  // frozen when set, as on F1 timing screens
   if ((k + 1) % MS_PER_SECTOR === 0) {
     const s = (k + 1) / MS_PER_SECTOR - 1, st = state.msTimes.slice(s * MS_PER_SECTOR).reduce((a, v) => a + v, 0);
-    b.mine.sec[s] = Math.min(b.mine.sec[s], st);
     state.secTimes[s] = st; state.secCols[s] = msColour(st, Math.min(b.ref.sec[s], b.mine.sec[s]), b.mine.sec[s]);
+    b.mine.sec[s] = Math.min(b.mine.sec[s], st);
   }
 }
 
@@ -270,9 +284,11 @@ function read() {
   state.fs = ex.getFrontSlide(); state.rs = ex.getRearSlide();
 }
 function step() {
+  const x0 = state.x, y0 = state.y;
   const code = ex.agentStep();
   read();
-  while (state.msEnds.length < BOUNDS.length && state.gates >= BOUNDS[state.msEnds.length]) completeMini(state.steps);
+  while (state.msEnds.length < BOUNDS.length && state.gates >= BOUNDS[state.msEnds.length])
+    completeMini(state.steps - 1 + crossFraction(T.gates[BOUNDS[state.msEnds.length]], x0, y0, state.x, state.y));
   if (code === 1 && state.msEnds.length === BOUNDS.length) completeMini(state.steps);
   trail.push([state.x, state.y]); if (trail.length > 6 * HZ) trail.shift();
   if (state.fs > 0 || state.rs > 0) { skids.push([state.x, state.y, state.yaw, state.fs, state.rs]); if (skids.length > 1200) skids.shift(); }
@@ -293,7 +309,7 @@ const SLIDERS = [
     sub: "Grip grows with downforce × speed². More means faster corners and shorter braking at speed; drag is a separate slider here." },
   { key: "dragAreaM2", label: "Drag (CD·A)", min: 0.5, max: 1.5, step: 0.01, rel: true, unit: "m²",
     sub: "Air resistance: sets top speed and how fast the car accelerates at speed. Less drag also means less braking from the air." },
-  { key: "aeroBalanceFront", label: "Aero balance (front share)", min: 0.35, max: 0.6, step: 0.005, rel: false, unit: "",
+  { key: "aeroBalanceFront", label: "Aero balance (front share)", min: 0.35, max: 0.6, step: 0.001, rel: false, unit: "",
     sub: "Share of downforce on the front axle. More front: sharper turn-in, lighter rear (oversteer, power slides). Less: understeer." },
 ];
 function renderSliders() {
@@ -310,7 +326,8 @@ function renderSliders() {
       <div class="sub">Stock ${stockShown}. ${s.sub}</div>`;
     div.querySelector("input").addEventListener("input", (e) => {
       const v = Number(e.target.value);
-      aero[s.key] = s.rel ? v * stock : v;
+      // Within half a slider step of stock means stock, exactly (so touching a slider never moves the car by itself).
+      aero[s.key] = Math.abs((s.rel ? v * stock : v) - stock) <= (s.rel ? s.step * stock : s.step) / 2 ? stock : s.rel ? v * stock : v;
       applyCar();
       if (state && state.status === "running") state.changed = true;
       renderSliders.pending = true;
@@ -331,9 +348,9 @@ function syncSliderLabels() {
 function renderLaps() {
   $("laps").innerHTML = history.slice(0, 12).map((h) => {
     const res = h.status === "finished" ? fmtTime(h.steps) : `${h.status} at gate ${h.gates}/${T.gates.length}`;
-    const strip = Array.from({ length: MS }, (_, k) => `<i title="${h.msTimes[k] != null ? (h.msTimes[k] / HZ).toFixed(2) + " s" : "not reached"}" style="background:${h.msCols[k] ? css(`--ms-${h.msCols[k]}`) : ""}"></i>`).join("");
-    const secs = h.secTimes.map((v, k) => (v == null ? "–" : `<span style="color:${css(`--ms-${h.secCols[k]}`)}">${(v / HZ).toFixed(2)}</span>`)).join(" / ");
-    return `<tr><td>${h.no}</td><td>${h.rules}</td><td>${h.seed}</td><td class="${h.status === "finished" ? "good" : "bad"}">${res}${h.stock ? " (stock)" : ""}</td>
+    const strip = Array.from({ length: MS }, (_, k) => `<i title="${h.msTimes[k] != null ? (h.msTimes[k] / HZ).toFixed(3) + " s" : "not reached"}" style="background:${h.msCols[k] ? css(`--ms-${h.msCols[k]}`) : ""}"></i>`).join("");
+    const secs = h.secTimes.map((v, k) => (v == null ? "–" : `<span style="color:${css(`--ms-${h.secCols[k]}`)}">${(v / HZ).toFixed(3)}</span>`)).join(" / ");
+    return `<tr><td>${h.no}</td><td>${h.rules}</td><td>${h.seed}</td><td class="${h.status === "finished" ? "good" : "bad"}">${res}${h.stock ? " (stock aero)" : h.changed ? " (aero changed mid-lap)" : " (aero not stock)"}</td>
       <td class="strip"><div class="ms small">${strip}</div></td><td>${secs}</td>
       <td>${Math.round((100 * h.aero.downforceAreaM2) / STOCK.downforceAreaM2)}%</td><td>${Math.round((100 * h.aero.dragAreaM2) / STOCK.dragAreaM2)}%</td>
       <td>${(100 * h.aero.aeroBalanceFront).toFixed(1)}%</td><td>${h.changed ? "yes" : "no"}</td></tr>`;
@@ -374,6 +391,7 @@ function drawMain() {
 function drawMap() {
   const cv = $("map"), ctx = cv.getContext("2d"), d = fit(cv);
   const W = cv.width, H = cv.height, b = g.bounds, pad = 12 * d;
+  if (W <= 2 * pad || H <= 2 * pad) return;  // not laid out yet (hidden or resizing): nothing to draw
   const s = Math.min((W - 2 * pad) / (b.maxX - b.minX), (H - 2 * pad) / (b.maxY - b.minY));
   const ox = (W - (b.maxX - b.minX) * s) / 2 - b.minX * s, oy = (H + (b.maxY - b.minY) * s) / 2 + b.minY * s;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
@@ -404,9 +422,9 @@ function hud() {
     const col = state.msCols[k];
     cell.style.background = col ? css(`--ms-${col}`) : "";
     cell.style.outline = !col && k === state.msCols.length && state.status === "running" ? `2px solid ${css("--fg")}` : "";
-    cell.title = col ? `mini sector ${k + 1}: ${(state.msTimes[k] / HZ).toFixed(2)} s` : `mini sector ${k + 1}`;
+    cell.title = col ? `mini sector ${k + 1}: ${(state.msTimes[k] / HZ).toFixed(3)} s` : `mini sector ${k + 1}`;
   });
-  $("sectors").innerHTML = state.secTimes.map((v, k) => `<div><span class="hint">S${k + 1}</span><b style="color:${v == null ? "" : css(`--ms-${state.secCols[k]}`)}">${v == null ? "–" : (v / HZ).toFixed(2) + " s"}</b></div>`).join("");
+  $("sectors").innerHTML = state.secTimes.map((v, k) => `<div><span class="hint">S${k + 1}</span><b style="color:${v == null ? "" : css(`--ms-${state.secCols[k]}`)}">${v == null ? "–" : (v / HZ).toFixed(3) + " s"}</b></div>`).join("");
 }
 function tick(now) {
   // Keep real time even when the browser drops frames (background tabs); cap so a long pause doesn't fast-forward.
@@ -416,8 +434,7 @@ function tick(now) {
     let k = Math.floor(carry); carry -= k;
     while (k-- > 0 && state.status === "running") step();
   }
-  drawMain(); drawMap(); hud();
-  requestAnimationFrame(tick);
+  try { drawMain(); drawMap(); hud(); } finally { requestAnimationFrame(tick); }  // a drawing error must not stop the lap
 }
 
 // ---------- start ----------
