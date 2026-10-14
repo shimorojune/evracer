@@ -6,3 +6,7 @@ logs/
 replay*.html
 .DS_Store
 runs-archive/
+
+# Generated and converted tracks (rebuild with fevoracer.trackgen / fevoracer.realtracks)
+tracks/
+*.html
