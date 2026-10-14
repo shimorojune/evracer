@@ -40,7 +40,7 @@ import torch
 import fevo
 
 from .paths import winner_path
-from .smooth import Score, fmt, measure
+from .smooth import Score, fmt, measure, reference_lap
 
 
 # --------------------------------------------------------------------------- network
@@ -203,7 +203,7 @@ def imitate(track: str, rules: str, baseline: str | None, name: str, rounds: int
     torch.manual_seed(seed)
 
     base_m = measure(base, sim)
-    base_lap = base_m["lap_s"]
+    base_lap = reference_lap(base_m)
     best_s, best_m, best = sc(base_m, base_lap), base_m, None
     print(f"Smooth throttle by imitation at {track} ({rules}). Baseline {os.path.basename(src)}: {fmt(base_m)}", flush=True)
     print(sc.describe(base_m["lap_time"]), flush=True)

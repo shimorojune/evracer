@@ -105,9 +105,12 @@ def measure(mlp: dict[str, Any], sim: fevo.Simulator | None = None, track: str |
     done = [i for i, l in enumerate(laps) if l.finished] or [0, 1, 2]
     return {
         "ranked": res.ranked,
+        "finished": sum(l.finished for l in laps),
+        "seeds": len(laps),
         "lap_s": res.median_steps / 60 if res.ranked else None,
         "lap_time": res.lap_time,
         "gates": sorted(l.gates_passed for l in laps)[1],
+        "min_gates": min(l.gates_passed for l in laps),
         "gate_count": laps[0].gate_count,
         "lock_s": float(np.mean([lock[i] for i in done])),
         "spin_s": float(np.mean([spin[i] for i in done])),
@@ -124,10 +127,12 @@ class Score:
     pedal: float = 0.0  # per unit of throttle travel per lap
 
     def __call__(self, m: dict[str, Any], base_lap: float | None) -> float:
-        if not m["ranked"]:
-            return UNRANKED + 30.0 * (1 - m["gates"] / max(1, m["gate_count"]))
+        if not all_finished(m):
+            # Every official start has to finish: a driver that bins one lap in three isn't racing.
+            # Scored by the worst lap's gates, so the search still climbs towards finishing it.
+            return UNRANKED + 30.0 * (1 - m["min_gates"] / max(1, m["gate_count"]))
         if base_lap is None:
-            # The baseline doesn't lap (e.g. a driver moved to new rules): any ranked lap beats it.
+            # The baseline doesn't finish every start (e.g. a driver moved to new rules): any clean lap beats it.
             base_lap = m["lap_s"]
         if self.max_loss is not None and m["lap_s"] > base_lap + self.max_loss + 1e-9:
             return UNRANKED / 2 + m["lap_s"]
@@ -145,8 +150,19 @@ def _eval(args: tuple[dict[str, Any], np.ndarray]) -> dict[str, Any]:
     return measure(unflatten(base, x), _SIM)
 
 
+def all_finished(m: dict[str, Any]) -> bool:
+    return m["finished"] == m["seeds"]
+
+
+def reference_lap(m: dict[str, Any]) -> float | None:
+    """A baseline's lap time to compare against, or None when it doesn't finish every start."""
+    return m["lap_s"] if all_finished(m) else None
+
+
 def fmt(m: dict[str, Any]) -> str:
     lap = m["lap_time"] or f"unranked (gate {m['gates']})"
+    if m["ranked"] and not all_finished(m):
+        lap += f" but {m['finished']}/{m['seeds']} laps (worst gate {m['min_gates']})"
     return f"{lap}  lock-up {m['lock_s']:.2f} s  wheelspin {m['spin_s']:.2f} s  throttle travel {m.get('pedal', 0):.1f}"
 
 
@@ -176,7 +192,7 @@ def smooth(track: str, baseline: str | None, name: str, generations: int, sigma:
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
 
     base_m = measure(base, track=track, rules=rules)
-    base_lap = base_m["lap_s"]
+    base_lap = reference_lap(base_m)
     print(f"Smooth inputs at {track} ({rules}). Baseline {os.path.basename(src)}: {fmt(base_m)}", flush=True)
     print(sc.describe(base_m["lap_time"]), flush=True)
 
@@ -187,6 +203,8 @@ def smooth(track: str, baseline: str | None, name: str, generations: int, sigma:
     if state_file.is_file() and not fresh:
         st = pickle.loads(state_file.read_bytes())
         best_x, best_m, sigma, gen0, rng = st["best_x"], st["best_m"], st["sigma"], st["gen"], st["rng"]
+        if "finished" not in best_m:  # saved before every start had to finish: score it again
+            best_m = measure(unflatten(base, best_x), track=track, rules=rules)
         print(f"resumed at generation {gen0}, sigma {sigma:.5f}, best {fmt(best_m)}", flush=True)
     else:
         best_x, best_m, gen0 = x0, base_m, 0
