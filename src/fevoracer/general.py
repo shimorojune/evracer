@@ -268,7 +268,7 @@ def main() -> None:
     ap.add_argument("--hidden", default="192,128")
     ap.add_argument("--steps", type=int, default=30000)
     ap.add_argument("--lr", type=float, default=1e-3)
-    ap.add_argument("--setup-from", default="winners/solo4-spielberg.json", help="the car setup the driver uses everywhere")
+    ap.add_argument("--setup-from", default="winners/solo3-spielberg.json", help="the car setup the driver uses everywhere")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
