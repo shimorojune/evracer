@@ -47,6 +47,18 @@ class Student(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
 
+    @classmethod
+    def from_mlp(cls, mlp: dict) -> "Student":
+        """A student holding an existing tanh MLP's weights (a warm start)."""
+        assert mlp["activation"] == "tanh" and mlp["outputActivation"] == "identity" and mlp["layers"][0] == 15 and mlp["layers"][-1] == 2
+        st = cls(mlp["layers"][1:-1])
+        lin = [m for m in st.net if isinstance(m, nn.Linear)]
+        with torch.no_grad():
+            for m, w, b in zip(lin, mlp["weights"], mlp["biases"]):
+                m.weight.copy_(torch.tensor(w, dtype=torch.float32).view(m.out_features, m.in_features))
+                m.bias.copy_(torch.tensor(b, dtype=torch.float32))
+        return st
+
     def to_mlp(self, setup: dict[str, float] | None, digits: int = 6) -> dict:
         lin = [m for m in self.net if isinstance(m, nn.Linear)]
         r = lambda t: [float(f"{v:.{digits}g}") for v in t.detach().double().flatten().tolist()]  # noqa: E731
@@ -105,7 +117,7 @@ def official(mlp: dict, track: str, rules: str) -> fevo.OfficialResult:
 
 
 def dagger(track_id: str, rules: str, setup_from: str | None, name: str, rounds: int, hidden: list[int], practice: int,
-           steps: int, lr: float, steer_weight: float, seed: int, expert_kw: dict) -> None:
+           steps: int, lr: float, steer_weight: float, seed: int, expert_kw: dict, init: str | None = None) -> None:
     torch.manual_seed(seed)
     rng = random.Random(seed)
     sim = fevo.Simulator(rules)
@@ -114,7 +126,11 @@ def dagger(track_id: str, rules: str, setup_from: str | None, name: str, rounds:
     setup = [setup_d[k["id"]] for k in sim.rules.setup] if setup_d else None
     sim.set_setup(setup)
     expert = LineExpert(track, sim.rules, setup, **expert_kw)
-    student = Student(hidden)
+    student = Student.from_mlp(json.load(open(init))) if init else Student(hidden)
+    if init:
+        hidden = [m.out_features for m in student.net if isinstance(m, nn.Linear)][:-1]
+        warm = official(student.to_mlp(setup_d), track_id, rules)
+        print(f"warm start from {init}: official {' / '.join(fevo.format_lap_time(l.steps) if l.finished else l.status for l in warm.laps)}", flush=True)
     out = winner_path(name, track_id)
     X: list[list[float]] = []
     Y: list[tuple[float, float]] = []
@@ -166,12 +182,13 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--steer-weight", type=float, default=4.0)
     ap.add_argument("--expert", default="{}", help="LineExpert keyword arguments as JSON")
+    ap.add_argument("--init", help="agent file (a 15-input tanh MLP) to warm-start the student from")
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     if os.path.abspath(winner_path(a.name, a.track)) in {os.path.abspath(p) for p in [a.setup_from or ""]}:
         raise SystemExit("--name would overwrite --setup-from")
     dagger(a.track, a.rules, a.setup_from, a.name, a.rounds, [int(h) for h in a.hidden.split(",")], a.practice, a.steps, a.lr,
-           a.steer_weight, a.seed, json.loads(a.expert))
+           a.steer_weight, a.seed, json.loads(a.expert), a.init)
 
 
 if __name__ == "__main__":
