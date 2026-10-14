@@ -199,7 +199,10 @@ def time_at(lap: dict[str, np.ndarray], n: int) -> np.ndarray:
             t[best + 1 : i + 1] = (s + 1) / lap["hz"]
             best = i
     t[0] = 0.0
-    t[n] = lap["steps"] / lap["hz"] if lap["status"] == "finished" else np.nan
+    if lap["status"] == "finished":
+        t[best + 1 :] = lap["steps"] / lap["hz"]  # points stepped over on the way across the line
+    else:
+        t[n] = np.nan
     return t
 
 
