@@ -57,6 +57,8 @@ def train_ppo() -> None:
     ap.add_argument("--daring", type=float, default=2.0, help="progress multiplier for grip usage^4 (braking, cornering, drive)")
     ap.add_argument("--commit", type=float, default=1.0, help="progress multiplier for (speed / reference speed)^4")
     ap.add_argument("--split", type=float, default=5.0, help="reward per second gained against the reference, per gate")
+    ap.add_argument("--slide", type=float, default=0.15, help="cost per step of lock-up/wheelspin (per axle, 0-1)")
+    ap.add_argument("--jerk", type=float, default=0.02, help="cost per unit change of throttle/brake per step")
     ap.add_argument("--crash", type=float, default=-20.0)
     ap.add_argument("--critic-warmup", type=int, default=0, help="value-only updates first (use after changing the reward)")
     ap.add_argument("--fresh", action="store_true")
@@ -64,7 +66,7 @@ def train_ppo() -> None:
     a = ap.parse_args()
     from .ppo import Daring, train
 
-    train(a.track, int(a.steps), a.workers, a.envs_per_worker, Daring(daring=a.daring, commit=a.commit, split=a.split, crash=a.crash), a.seed, not a.fresh, a.critic_warmup)
+    train(a.track, int(a.steps), a.workers, a.envs_per_worker, Daring(daring=a.daring, commit=a.commit, split=a.split, slide=a.slide, jerk=a.jerk, crash=a.crash), a.seed, not a.fresh, a.critic_warmup)
 
 
 def warm_start() -> None:

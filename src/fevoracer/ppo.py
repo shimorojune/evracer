@@ -55,6 +55,11 @@ class Daring:
     commit: float = 1.0
     #: Per gate: seconds gained (+) or lost (−) against the reference lap over the last 40 m.
     split: float = 5.0
+    #: Per step, per unit of lock-up or wheelspin intensity (0–1 per axle): grip used for
+    #: sliding is grip not used for going faster, so feed the power in and brake at the edge.
+    slide: float = 0.15
+    #: Per step, per unit change of throttle/brake: smooth hands, no pumping.
+    jerk: float = 0.02
     crash: float = -20.0
     lap: float = 50.0
     lap_time: float = 0.02  # per step under the lap's step limit
@@ -194,6 +199,7 @@ class RaceEnv:
         self.idx = self.sim.progress_index
         self.t = 0
         self.vx_prev = self.sim.pose()[3]
+        self.prev_throttle = 0.0
         self.gates = self.sim.gates_passed
         self.gate_step: int | None = None  # step and point of the last gate crossed this episode
         self.gate_idx = 0
@@ -221,6 +227,10 @@ class RaceEnv:
         pace = min(1.0, vx / ref)
         bonus = 1.0 + d.daring * usage**4 + d.commit * pace**4
         r = d.progress * moved * (bonus if moved > 0 else 1.0)
+        # Smooth inputs: sliding tyres and stabbing the pedals cost a little every step.
+        r -= d.slide * (vals[21] + vals[22])
+        r -= d.jerk * abs(throttle - self.prev_throttle)
+        self.prev_throttle = throttle
         gates = int(vals[19])
         if gates > self.gates:
             # Gate split against the reference lap: seconds gained pay, seconds lost cost.
