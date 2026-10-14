@@ -103,6 +103,18 @@ def _expert_for(spec: str) -> tuple[fevo.Track, LineExpert, dict]:
     return tr, LineExpert(tr, _SIM.rules, _SETUP, offsets=off, **kw), kw
 
 
+def braking_points(v: np.ndarray, drop: float = 0.25, within: int = 400) -> list[int]:
+    """Where the expert's planned speed peaks before falling by more than `drop` within `within` metres: braking zones."""
+    n = len(v)
+    out = []
+    for i in range(0, n, 5):
+        ahead = v[(i + np.arange(1, within)) % n]
+        if v[i] >= v[(i - 5) % n] and v[i] >= v[(i + 5) % n] and ahead.min() < (1 - drop) * v[i]:
+            if not out or i - out[-1] > within:
+                out.append(i)
+    return out
+
+
 def _mask(obs: list[float]) -> list[float]:
     o = list(obs)
     for i in MASKED:
@@ -112,7 +124,7 @@ def _mask(obs: list[float]) -> list[float]:
 
 def _rollouts(args: tuple) -> tuple[np.ndarray, np.ndarray, dict]:
     """One track: a lap from a random official start plus practice stints, mixing expert and student driving."""
-    spec, student_mlp, beta, practice, stint, seed = args
+    spec, student_mlp, beta, practice, stint, seed, brake_starts, expert_share = args
     rng = np.random.default_rng(seed)
     tr, ex, kw = _expert_for(spec)
     sim = _SIM
@@ -122,7 +134,14 @@ def _rollouts(args: tuple) -> tuple[np.ndarray, np.ndarray, dict]:
     xs, ys, end = [], [], {}
     n = tr.points
     starts = [{"seed": int(rng.integers(3)), "steps": 12000}]
+    bps = braking_points(ex.v)
     for _ in range(practice):
+        if bps and rng.random() < brake_starts:
+            # Just before a braking zone at the expert's own speed: practise the whole stop, not only its first metres.
+            p = (int(rng.choice(bps)) - int(rng.integers(0, 200))) % n
+            starts.append({"point": p, "lat": float(rng.uniform(-1.0, 1.0)), "hdg": float(rng.uniform(-0.02, 0.02)),
+                           "speed": float(rng.uniform(0.95, 1.05) * ex.v[p]), "steps": stint})
+            continue
         p = int(rng.integers(n))
         starts.append({"point": p, "lat": float(rng.uniform(-2.0, 2.0)), "hdg": float(rng.uniform(-0.05, 0.05)),
                        "speed": float(rng.uniform(0.6, 1.0) * ex.v[p]), "steps": stint})
@@ -133,11 +152,13 @@ def _rollouts(args: tuple) -> tuple[np.ndarray, np.ndarray, dict]:
             obs = sim.reset(1, point=st_["point"], lateral_m=st_["lat"], heading_rad=st_["hdg"], speed=st_["speed"])
         ex.reset()
         status = "running"
+        # Some runs are the expert's from start to finish, so whole braking zones get driven and labelled to the end.
+        b = 1.0 if rng.random() < expert_share else beta
         for _ in range(st_["steps"]):
             a_exp = ex(sim, obs)
             xs.append(_mask(obs))
             ys.append(a_exp)
-            if student_mlp is not None and rng.random() >= beta:
+            if student_mlp is not None and rng.random() >= b:
                 a = sim.evaluate_program(obs)
             else:
                 a = a_exp
@@ -211,7 +232,8 @@ def weights(X: np.ndarray, Y: np.ndarray, brake_weight: float) -> np.ndarray:
 
 def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, practice: int, stint: int, hidden: list[int],
           steps: int, lr: float, workers: int | None, seed: int, setup_from: str, init: str | None = None,
-          start_round: int = 0, brake_weight: float = 1.0) -> None:
+          start_round: int = 0, brake_weight: float = 1.0, brake_starts: float = 0.0, expert_share: float = 0.0,
+          seed_rounds: int = 0) -> None:
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     rules = fevo.load_rules(RULES)
@@ -231,7 +253,7 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
     best, out = -1.0, WINNERS / f"{name}.json"
     t0 = time.time()
     print(f"General driver on {RULES}: student {[len(rules.observation), *hidden, 2]} with inputs {MASKED} masked, braking/corner-entry "
-          f"states drawn x{brake_weight}; per round {gen_per_round} new "
+          f"states drawn x{brake_weight}, {brake_starts:.0%} of practice stints start before a braking zone, {expert_share:.0%} of runs all expert, {seed_rounds} expert-only seed rounds, data kept across rounds; per round {gen_per_round} new "
           f"generated + {real_per_round} of {len(real_train)} real training circuits; held out {held}", flush=True)
     with mp.get_context("spawn").Pool(workers, initializer=_init, initargs=(setup,)) as pool:
         base = pool.map(_official, [(h, None, True) for h in held])
@@ -247,10 +269,12 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
             line, best = summarise(ev0)
             print(f"warm start from {init}: held out {line} | completed {best:.1%}", flush=True)
         for r in range(start_round, start_round + rounds + 1):
-            beta = 1.0 if r == 0 else max(0.0, 0.6 - 0.1 * r)
+            # The first seed_rounds rounds of a continued run collect expert-driven laps only (the data a fresh run
+            # starts with), then the usual schedule takes over.
+            beta = 1.0 if r == 0 or r - start_round < seed_rounds else max(0.0, 0.6 - 0.1 * (r - seed_rounds))
             specs = [f"gen:{int(s)}" for s in rng.integers(1, 800_000, gen_per_round)] + list(rng.choice(real_train, real_per_round, replace=False))
             mlp = None if r == 0 else student.to_mlp(setup_d)
-            res = pool.map(_rollouts, [(s, mlp, beta, practice, stint, int(rng.integers(1 << 30))) for s in specs])
+            res = pool.map(_rollouts, [(s, mlp, beta, practice, stint, int(rng.integers(1 << 30)), brake_starts, expert_share) for s in specs])
             for xs, ys, _ in res:
                 X.append(xs)
                 Y.append(ys)
@@ -295,11 +319,14 @@ def main() -> None:
     ap.add_argument("--init", help="continue from this general driver (same inputs)")
     ap.add_argument("--start-round", type=int, default=0, help="round number to start the expert-share schedule at")
     ap.add_argument("--brake-weight", type=float, default=1.0, help="how much more often braking/corner-entry states are drawn")
+    ap.add_argument("--brake-starts", type=float, default=0.0, help="share of practice stints that start just before a braking zone at full speed")
+    ap.add_argument("--expert-share", type=float, default=0.0, help="share of runs driven entirely by the expert in every round")
+    ap.add_argument("--seed-rounds", type=int, default=0, help="expert-only data rounds before the schedule when continuing (--init)")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     train(a.name, a.rounds, a.gen, a.real, a.practice, a.stint, [int(h) for h in a.hidden.split(",")], a.steps, a.lr,
-          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight)
+          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds)
 
 
 if __name__ == "__main__":
