@@ -117,6 +117,35 @@ def smooth_inputs() -> None:
     smooth(a.track, a.baseline, a.name, a.generations, a.sigma, a.popsize, sc, a.restart_after, a.workers, a.seed, a.fresh, a.only)
 
 
+def imitate_throttle() -> None:
+    ap = argparse.ArgumentParser(prog="imitate-throttle", description="Smooth throttle by imitation (DAgger), steering frozen")
+    ap.add_argument("--track", default="spielberg", choices=fevo.track_ids())
+    ap.add_argument("--rules", default="solo-1", help="rules version to drive and score on")
+    ap.add_argument("--baseline", help="agent file to start from (default winners/practice-<track>.json; never overwritten)")
+    ap.add_argument("--name", default="smooththrottle", help="writes winners/<name>-<track>.json")
+    ap.add_argument("--rounds", type=int, default=8)
+    ap.add_argument("--extra", type=int, default=32, help="hidden units added per layer, feeding only the throttle")
+    ap.add_argument("--window", type=float, default=0.15, help="throttle low-pass window, seconds")
+    ap.add_argument("--apply", type=float, default=0.25, help="fastest 0-to-full throttle application, seconds")
+    ap.add_argument("--spin-trim", type=float, default=0.1, help="throttle target cut where the rears spun")
+    ap.add_argument("--noise-runs", type=int, default=3, help="extra laps per round with throttle noise")
+    ap.add_argument("--noise", type=float, default=0.05)
+    ap.add_argument("--epochs", type=int, default=20)
+    ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--slide", type=float, default=0.3)
+    ap.add_argument("--spin", type=float, default=3.0)
+    ap.add_argument("--slower", type=float, default=5.0)
+    ap.add_argument("--max-loss", type=float, default=0.05)
+    ap.add_argument("--pedal", type=float, default=0.01)
+    ap.add_argument("--seed", type=int, default=1)
+    a = ap.parse_args()
+    from .imitate import imitate
+    from .smooth import Score
+
+    sc = Score(slide=a.slide, spin=a.spin, slower=a.slower, max_loss=a.max_loss, pedal=a.pedal)
+    imitate(a.track, a.rules, a.baseline, a.name, a.rounds, a.extra, a.window, a.apply, a.spin_trim, a.noise_runs, a.noise,
+            a.epochs, a.lr, sc, a.seed)
+
 def _winner(track: str, path: str | None) -> Path:
     if path:
         return Path(path)
