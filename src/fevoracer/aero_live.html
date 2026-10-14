@@ -10,6 +10,7 @@
     --grass: #e9eadf; --asphalt: #3b3b3e; --edge: #ffffff; --gate: rgba(127,178,255,.35);
     --start: #e5484d; --accent: #2563eb; --trail: rgba(37,99,235,.55);
     --throttle: #16a34a; --brake: #dc2626; --steer: #7c3aed; --warn: #c2410c; --ok: #15803d;
+    --ms-purple: #a855f7; --ms-green: #16a34a; --ms-yellow: #eab308;
   }
   @media (prefers-color-scheme: dark) {
     :root { --bg: #141413; --panel: #1e1e1d; --fg: #ecebe8; --muted: #9b9a97; --line: #2e2e2c;
@@ -21,7 +22,9 @@
   header h1 { font-size: 16px; margin: 0 8px 0 0; }
   select, button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
   button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .grid { display: grid; grid-template-columns: 1fr 340px; gap: 16px; padding: 16px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px; }
+  .side { min-width: 0; }
+  .scroll { overflow-x: auto; }
   @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
   .panel h2 { font-size: 13px; font-weight: 600; margin: 0; padding: 10px 12px 0; }
@@ -45,12 +48,22 @@
   .hint { color: var(--muted); font-size: 12px; padding: 0 12px 12px; }
   .row { display: flex; gap: 8px; align-items: center; }
   #status { font-weight: 600; }
+  .ms { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; }
+  .ms i { height: 14px; border-radius: 2px; background: var(--line); }
+  .ms.small i { height: 9px; border-radius: 1px; }
+  .msbox { padding: 0 12px 12px; display: grid; gap: 8px; }
+  .sectors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-variant-numeric: tabular-nums; }
+  .sectors div { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  .sectors b { display: block; font-size: 16px; }
+  td.strip { min-width: 180px; }
+  td { white-space: nowrap; }
 </style>
 </head>
 <body>
 <header>
   <h1>fevo aero lab</h1>
   <span class="hint" id="who" style="padding:0"></span>
+  <label class="row">Rules <select id="rules"></select></label>
   <label class="row">Start <select id="seed"></select></label>
   <button class="primary" id="play">Pause</button>
   <button id="restart">Restart lap</button>
@@ -63,7 +76,7 @@
     <div class="panel"><canvas id="main"></canvas></div>
     <div class="panel">
       <h2>Laps this session</h2>
-      <table><thead><tr><th>#</th><th>Start</th><th>Result</th><th>Downforce</th><th>Drag</th><th>Front bal.</th><th>Aero changed mid-lap</th></tr></thead><tbody id="laps"></tbody></table>
+      <div class="scroll"><table><thead><tr><th>#</th><th>Rules</th><th>Start</th><th>Result</th><th>Mini sectors</th><th>S1 / S2 / S3</th><th>Downforce</th><th>Drag</th><th>Front bal.</th><th>Changed mid-lap</th></tr></thead><tbody id="laps"></tbody></table></div>
       <div class="hint" id="stocknote"></div>
     </div>
   </div>
@@ -83,6 +96,11 @@
         <div class="k hint" style="padding:0">Steer (left − / right +)</div><div class="bar"><i id="steerBar"></i></div>
         <div class="k hint" style="padding:0">Rear slide (wheelspin or lock-up)</div><div class="bar"><i id="rsBar"></i></div>
         <div class="k hint" style="padding:0">Front slide (lock-up)</div><div class="bar"><i id="fsBar"></i></div>
+      </div>
+      <div class="msbox">
+        <div class="hint" style="padding:0">Mini sectors: <span style="color:var(--ms-purple)">purple</span> fastest of any lap on the page (this session and the official stock laps), <span style="color:var(--ms-green)">green</span> this session's best, <span style="color:var(--ms-yellow)">yellow</span> slower than it</div>
+        <div class="ms" id="ms"></div>
+        <div class="sectors" id="sectors"></div>
       </div>
     </div>
     <div class="panel">
@@ -127,6 +145,7 @@ async function boot() {
   const R = DATA.rules;
   applyCar();
   ex.setRearSlideModel(R.rearSlide[0], R.rearSlide[1]);
+  ex.setTrackLimits(R.trackLimits);
   ex.setTiming(R.agentHz, R.physicsSubsteps);
   ex.setLimits(R.maxSteps, R.stopSpeedMps, R.stopSteps);
   ex.setSensors(R.rayCount, R.rayLengthM, R.rayFovRad, R.speedNormMps);
@@ -158,6 +177,36 @@ const g = (() => {
   for (const [x, y] of [...L, ...Rr]) { minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); }
   return { left, right, surface, gates, start, bounds: { minX, minY, maxX, maxY } };
 })();
+
+// ---------- mini sectors (as the replay viewer: 24 from the gates, three sectors of 8) ----------
+const MS = 24, MS_PER_SECTOR = 8;
+const BOUNDS = Array.from({ length: MS - 1 }, (_, i) => Math.round(((i + 1) * T.gates.length) / MS));
+const msPaths = (() => {
+  const c = T.centerline, a0 = [T.gates[0], ...BOUNDS.map((k) => T.gates[k])], a1 = [...BOUNDS.map((k) => T.gates[k]), T.gates[0] + n];
+  return a0.map((a, k) => { const p = new Path2D(); for (let i = a; i <= a1[k]; i++) { const q = i % n; i === a ? p.moveTo(c[2*q], c[2*q+1]) : p.lineTo(c[2*q], c[2*q+1]); } return p; });
+})();
+const msColour = (t, overall, personal) => (t <= overall ? "purple" : t <= personal ? "green" : "yellow");
+const timesOf = (ends) => ends.map((e, k) => e - (k ? ends[k - 1] : 0));
+const sectorsOf = (t) => [0, 1, 2].map((s) => (t.length >= (s + 1) * MS_PER_SECTOR ? t.slice(s * MS_PER_SECTOR, (s + 1) * MS_PER_SECTOR).reduce((a, b) => a + b, 0) : null));
+// Per rules version: the official stock laps' bests (the "other drivers" on the page) and this session's bests.
+const BEST = {};
+for (const o of DATA.rulesOptions) {
+  const ref = { all: Array(MS).fill(Infinity), sec: [Infinity, Infinity, Infinity] };
+  for (const l of o.official) { const t = timesOf(l.msEnds); t.forEach((v, k) => (ref.all[k] = Math.min(ref.all[k], v))); sectorsOf(t).forEach((v, k) => v != null && (ref.sec[k] = Math.min(ref.sec[k], v))); }
+  BEST[o.id] = { ref, mine: { all: Array(MS).fill(Infinity), sec: [Infinity, Infinity, Infinity] } };
+}
+let RULES = DATA.rulesOptions.find((o) => o.id === DATA.rules.id);
+function completeMini(endStep) {
+  const k = state.msEnds.length, t = endStep - (k ? state.msEnds[k - 1] : 0), b = BEST[state.rules];
+  state.msEnds.push(endStep); state.msTimes.push(t);
+  b.mine.all[k] = Math.min(b.mine.all[k], t);
+  state.msCols.push(msColour(t, Math.min(b.ref.all[k], b.mine.all[k]), b.mine.all[k]));  // frozen when set, as on F1 timing screens
+  if ((k + 1) % MS_PER_SECTOR === 0) {
+    const s = (k + 1) / MS_PER_SECTOR - 1, st = state.msTimes.slice(s * MS_PER_SECTOR).reduce((a, v) => a + v, 0);
+    b.mine.sec[s] = Math.min(b.mine.sec[s], st);
+    state.secTimes[s] = st; state.secCols[s] = msColour(st, Math.min(b.ref.sec[s], b.mine.sec[s]), b.mine.sec[s]);
+  }
+}
 
 const LOCK = "#8fd0ff", SPIN = "#ff8a3d";
 const WHEELS = { front: [[1.6, 0.74], [1.6, -0.74]], rear: [[-1.75, 0.74], [-1.75, -0.74]] };
@@ -208,7 +257,8 @@ const isStock = () => Object.keys(aero).every((k) => aero[k] === STOCK[k]);
 function restart() {
   const s = DATA.seeds[Number($("seed").value)];
   ex.resetAtStart(s.lateralM, s.headingRad, DATA.rules.initialSpeedMps);
-  state = { status: "running", changed: false, startAero: { ...aero }, startedStock: isStock() };
+  state = { status: "running", changed: false, startAero: { ...aero }, startedStock: isStock(), rules: RULES.id,
+            msEnds: [], msTimes: [], msCols: [], secTimes: [null, null, null], secCols: [null, null, null] };
   trail = []; skids = [];
   lapNo++;
   read();
@@ -222,12 +272,15 @@ function read() {
 function step() {
   const code = ex.agentStep();
   read();
+  while (state.msEnds.length < BOUNDS.length && state.gates >= BOUNDS[state.msEnds.length]) completeMini(state.steps);
+  if (code === 1 && state.msEnds.length === BOUNDS.length) completeMini(state.steps);
   trail.push([state.x, state.y]); if (trail.length > 6 * HZ) trail.shift();
   if (state.fs > 0 || state.rs > 0) { skids.push([state.x, state.y, state.yaw, state.fs, state.rs]); if (skids.length > 1200) skids.shift(); }
   if (code !== 0) {
     state.status = STATUS[code] || "error";
-    history.unshift({ no: lapNo, seed: Number($("seed").value), status: state.status, steps: state.steps, gates: state.gates,
-                      aero: { ...aero }, changed: state.changed, stock: state.startedStock && !state.changed });
+    history.unshift({ no: lapNo, rules: state.rules, seed: Number($("seed").value), status: state.status, steps: state.steps, gates: state.gates,
+                      aero: { ...aero }, changed: state.changed, stock: state.startedStock && !state.changed,
+                      msCols: [...state.msCols], msTimes: [...state.msTimes], secTimes: [...state.secTimes], secCols: [...state.secCols] });
     renderLaps();
     // Next lap starts automatically after a short pause, with whatever aero is set now.
     setTimeout(() => { if (state.status !== "running") restart(); }, 1600);
@@ -278,7 +331,10 @@ function syncSliderLabels() {
 function renderLaps() {
   $("laps").innerHTML = history.slice(0, 12).map((h) => {
     const res = h.status === "finished" ? fmtTime(h.steps) : `${h.status} at gate ${h.gates}/${T.gates.length}`;
-    return `<tr><td>${h.no}</td><td>${h.seed}</td><td class="${h.status === "finished" ? "good" : "bad"}">${res}${h.stock ? " (stock)" : ""}</td>
+    const strip = Array.from({ length: MS }, (_, k) => `<i title="${h.msTimes[k] != null ? (h.msTimes[k] / HZ).toFixed(2) + " s" : "not reached"}" style="background:${h.msCols[k] ? css(`--ms-${h.msCols[k]}`) : ""}"></i>`).join("");
+    const secs = h.secTimes.map((v, k) => (v == null ? "–" : `<span style="color:${css(`--ms-${h.secCols[k]}`)}">${(v / HZ).toFixed(2)}</span>`)).join(" / ");
+    return `<tr><td>${h.no}</td><td>${h.rules}</td><td>${h.seed}</td><td class="${h.status === "finished" ? "good" : "bad"}">${res}${h.stock ? " (stock)" : ""}</td>
+      <td class="strip"><div class="ms small">${strip}</div></td><td>${secs}</td>
       <td>${Math.round((100 * h.aero.downforceAreaM2) / STOCK.downforceAreaM2)}%</td><td>${Math.round((100 * h.aero.dragAreaM2) / STOCK.dragAreaM2)}%</td>
       <td>${(100 * h.aero.aeroBalanceFront).toFixed(1)}%</td><td>${h.changed ? "yes" : "no"}</td></tr>`;
   }).join("");
@@ -294,6 +350,9 @@ function drawMain() {
   ctx.lineWidth = 0.3; ctx.strokeStyle = css("--edge"); ctx.stroke(g.left); ctx.stroke(g.right);
   ctx.lineWidth = 0.15; ctx.strokeStyle = css("--gate"); ctx.stroke(g.gates);
   ctx.lineWidth = 0.6; ctx.strokeStyle = css("--start"); ctx.stroke(g.start);
+  ctx.globalAlpha = 0.45; ctx.lineWidth = 2.2;
+  state.msCols.forEach((col, k) => { ctx.strokeStyle = css(`--ms-${col}`); ctx.stroke(msPaths[k]); });
+  ctx.globalAlpha = 1;
   for (const [x, y, yaw, kf, kr] of skids) for (const [axle, k] of [["front", kf], ["rear", kr]]) {
     if (k <= 0) continue;
     ctx.fillStyle = `rgba(10,10,12,${(0.2 + 0.45 * k).toFixed(2)})`;
@@ -341,6 +400,13 @@ function hud() {
   st.style.left = state.steer >= 0 ? "50%" : `${50 + 50 * state.steer}%`; st.style.width = `${50 * Math.abs(state.steer)}%`; st.style.background = css("--steer");
   for (const [id, k] of [["rsBar", state.rs], ["fsBar", state.fs]]) { const e = $(id); e.style.left = "0"; e.style.width = `${100 * k}%`; e.style.background = css("--warn"); }
   if (renderSliders.pending) { syncSliderLabels(); renderSliders.pending = false; }
+  [...$("ms").children].forEach((cell, k) => {
+    const col = state.msCols[k];
+    cell.style.background = col ? css(`--ms-${col}`) : "";
+    cell.style.outline = !col && k === state.msCols.length && state.status === "running" ? `2px solid ${css("--fg")}` : "";
+    cell.title = col ? `mini sector ${k + 1}: ${(state.msTimes[k] / HZ).toFixed(2)} s` : `mini sector ${k + 1}`;
+  });
+  $("sectors").innerHTML = state.secTimes.map((v, k) => `<div><span class="hint">S${k + 1}</span><b style="color:${v == null ? "" : css(`--ms-${state.secCols[k]}`)}">${v == null ? "–" : (v / HZ).toFixed(2) + " s"}</b></div>`).join("");
 }
 function tick(now) {
   // Keep real time even when the browser drops frames (background tabs); cap so a long pause doesn't fast-forward.
@@ -359,7 +425,17 @@ boot().then(() => {
   DATA.seeds.forEach((_, i) => $("seed").add(new Option(String(i), String(i))));
   $("seed").value = "1";
   $("who").textContent = `${DATA.agent} · ${DATA.trackName} · rules ${DATA.rules.id}`;
-  $("stocknote").textContent = `Official ${DATA.rules.id} laps of this driver at stock aero: ${DATA.official.map((l) => (l.finished ? fmtTime(l.steps) : l.status)).join(" / ")} (starts 0 / 1 / 2). A stock lap here should match exactly: same wasm, same numbers.`;
+  for (let k = 0; k < MS; k++) $("ms").appendChild(document.createElement("i"));
+  for (const o of DATA.rulesOptions) $("rules").add(new Option(o.id, o.id));
+  $("rules").value = RULES.id;
+  const note = () => ($("stocknote").textContent = `Official ${RULES.id} laps of this driver at stock aero: ${RULES.official.map((l) => (l.finished ? fmtTime(l.steps) : l.status)).join(" / ")} (starts 0 / 1 / 2). A stock lap here should match exactly: same wasm, same numbers. ${RULES.trackLimits ? "Track limits: one tyre on track is enough (F1)." : "Track limits: the whole car inside the lines."}`);
+  note();
+  $("rules").onchange = () => {
+    RULES = DATA.rulesOptions.find((o) => o.id === $("rules").value);
+    ex.setRearSlideModel(RULES.rearSlide[0], RULES.rearSlide[1]);
+    ex.setTrackLimits(RULES.trackLimits);
+    note(); restart();
+  };
   renderSliders();
   restart();
   $("play").onclick = () => { playing = !playing; $("play").textContent = playing ? "Pause" : "Play"; };
@@ -367,7 +443,7 @@ boot().then(() => {
   $("seed").onchange = () => restart();
   $("stock").onclick = () => { Object.assign(aero, { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront }); applyCar(); if (state.status === "running") state.changed = true; renderSliders.pending = true; };
   addEventListener("keydown", (e) => { if (e.key === " " && e.target === document.body) { e.preventDefault(); $("play").click(); } if (e.key === "r") restart(); });
-  window.__aero = { aero, STOCK, applyCar, restart, step, state: () => state, history };  // for automated checks
+  window.__aero = { aero, STOCK, applyCar, restart, step, state: () => state, history, BEST, rules: () => RULES.id };  // for automated checks
   requestAnimationFrame((t) => { last = t; tick(t); });
 }).catch((e) => { document.body.insertAdjacentHTML("afterbegin", `<pre style="color:#c00;padding:16px">${e.stack || e}</pre>`); throw e; });
 </script>
