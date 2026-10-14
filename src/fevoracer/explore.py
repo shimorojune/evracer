@@ -80,30 +80,48 @@ def episodes(sim: fevo.Simulator, mlp: dict[str, Any], practice: list[tuple[int,
         t = steps / hz + (0 if status == "finished" else cfg["crash_s"])
         rates.append(dist / t)
         laps.append((status, steps))
-    for point, lat, hdg, speed in practice:
-        sim.reset(1, point=point, lateral_m=lat, heading_rad=hdg, speed=speed)
+    survived = 0
+    for k, (point, lat, hdg, speed) in enumerate(practice):
+        obs = sim.reset(1, point=point, lateral_m=lat, heading_rad=hdg, speed=speed)
         prev, dist, status = point, 0, "running"
+        an, on = cfg.get("act_noise", 0.0), cfg.get("obs_noise", 0.0)
+        rng = np.random.default_rng(cfg.get("noise_seed", 0) * 1000 + k)  # the same noise for every candidate
+        ou = np.zeros(2)
+        n_obs = len(obs)
         for _ in range(cfg["stint"]):
-            status = sim.agent_step()
+            if an == 0 and on == 0:
+                status = sim.agent_step()
+            else:
+                # The driver's own mistakes: noise on what it sees, and a slowly drifting error on what it does
+                # (Ornstein-Uhlenbeck, correlated over about half a second).
+                seen = list(np.asarray(obs) + on * rng.standard_normal(n_obs)) if on else obs
+                steer, thr = sim.evaluate_program(seen)
+                ou += -ou / 30 + an * np.sqrt(2 / 30) * rng.standard_normal(2)
+                code, vals = sim.step_fast(float(np.clip(steer + ou[0], -1, 1)), float(np.clip(thr + ou[1], -1, 1)))
+                obs = list(vals[:n_obs])
+                status = fevo.sim.STATUS[code]
             idx = sim.progress_index
             dist += _progress(prev, idx, n)
             prev = idx
             if status != "running":
                 break
+        survived += status in ("running", "finished")
         t = sim.steps / hz + (cfg["crash_s"] if status not in ("running", "finished") else 0)
         rates.append(max(0, dist) / max(t, 1e-3))
     finished = sorted(st for s, st in laps if s == "finished")
     return {"fitness": float(np.mean(rates)), "laps": laps, "clean": len(finished) == len(laps),
-            "median": finished[len(finished) // 2] if finished else None}
+            "median": finished[len(finished) // 2] if finished else None, "survived": survived / max(1, len(practice))}
 
 
-def _eval(args: tuple[dict[str, Any], np.ndarray, list]) -> dict:
-    base, x, practice = args
-    return episodes(_SIM, unflatten(base, x), practice, _CFG)
+def _eval(args: tuple) -> dict:
+    base, x, practice, cfg = args
+    return episodes(_SIM, unflatten(base, x), practice, {**_CFG, **cfg})
 
 
 def explore(track: str, rules: str, baseline: str, name: str, generations: int, pairs: int, sigma: float, lr: float,
-            practice: int, stint: int, crash_s: float, workers: int | None, seed: int, fresh: bool) -> None:
+            practice: int, stint: int, crash_s: float, workers: int | None, seed: int, fresh: bool,
+            act_noise: float = 0.0, obs_noise: float = 0.0, noise_max: float = 0.1, noise_up: float = 1.2,
+            survive: float = 0.8, robust_every: int = 10) -> None:
     sim = fevo.Simulator(rules)
     sim.load_track(track)
     base = widen(json.load(open(baseline)), len(sim.rules.observation))
@@ -115,15 +133,18 @@ def explore(track: str, rules: str, baseline: str, name: str, generations: int, 
     rng = np.random.default_rng(seed)
     x = flatten(base)
     m, v, gen0 = np.zeros_like(x), np.zeros_like(x), 0
+    noise = {"act": act_noise, "obs": obs_noise}
     start = episodes(sim, base, [], cfg)
     best = start["median"] if start["clean"] else None
     if state_file.is_file() and not fresh:
         st = pickle.loads(state_file.read_bytes())
         x, m, v, gen0, best, rng = st["x"], st["m"], st["v"], st["gen"], st["best"], st["rng"]
+        noise = st.get("noise", noise)
         print(f"resumed at generation {gen0}, best {fevo.format_lap_time(best) if best else 'none'}", flush=True)
     fmt = lambda laps: " / ".join(fevo.format_lap_time(s) if st == "finished" else st for st, s in laps)  # noqa: E731
     print(f"Explore at {track} ({rules}), {len(x)} numbers, {2 * pairs} candidates a generation, sigma {sigma}, lr {lr}, "
-          f"{practice} practice stints of {stint} steps, crash +{crash_s} s. Baseline {os.path.basename(baseline)}: {fmt(start['laps'])}", flush=True)
+          f"{practice} practice stints of {stint} steps, crash +{crash_s} s, stint noise act {noise['act']} obs {noise['obs']} "
+          f"(x{noise_up} when {survive:.0%} survive, up to {noise_max}). Baseline {os.path.basename(baseline)}: {fmt(start['laps'])}", flush=True)
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
     t0 = time.time()
     b1, b2, eps = 0.9, 0.999, 1e-8
@@ -134,15 +155,16 @@ def explore(track: str, rules: str, baseline: str, name: str, generations: int, 
             for _ in range(practice):
                 p = int(rng.integers(sim.track.points))
                 starts.append((p, float(rng.uniform(-2.5, 2.5)), float(rng.uniform(-0.05, 0.05)), float(rng.uniform(25, 75))))
-            noise = rng.standard_normal((pairs, len(x)))
-            cands = [x + sigma * e for e in noise] + [x - sigma * e for e in noise]
-            res = pool.map(_eval, [(base, c, starts) for c in cands])
+            eps_ = rng.standard_normal((pairs, len(x)))
+            cands = [x + sigma * e for e in eps_] + [x - sigma * e for e in eps_]
+            gcfg = {"act_noise": noise["act"], "obs_noise": noise["obs"], "noise_seed": gen}
+            res = pool.map(_eval, [(base, c, starts, gcfg) for c in cands])
             f = np.array([r["fitness"] for r in res])
             # Rank shaping: centred ranks in [-0.5, 0.5], robust to a few huge or terrible scores.
             ranks = np.empty(len(f))
             ranks[np.argsort(f)] = np.arange(len(f))
             u = ranks / (len(f) - 1) - 0.5
-            g = ((u[:pairs] - u[pairs:])[:, None] * noise).sum(0) / (2 * pairs * sigma)
+            g = ((u[:pairs] - u[pairs:])[:, None] * eps_).sum(0) / (2 * pairs * sigma)
             m = b1 * m + (1 - b1) * g
             v = b2 * v + (1 - b2) * g * g
             x = x + lr * (m / (1 - b1**gen)) / (np.sqrt(v / (1 - b2**gen)) + eps)
@@ -155,10 +177,23 @@ def explore(track: str, rules: str, baseline: str, name: str, generations: int, 
                     out.write_text(json.dumps(unflatten(base, params)) + "\n")
                     mark = f"  << new best ({label})"
             clean = sum(r["clean"] for r in res)
+            surv = float(np.mean([r["survived"] for r in res])) if practice else 1.0
             print(f"gen {gen:4d}  {(time.time() - t0) / 60:6.1f} min  fitness mean {f.mean():6.2f} max {f.max():6.2f} m/s  "
-                  f"clean {clean:2d}/{len(res)}  mean net {fmt(mean['laps'])}  |  best {fevo.format_lap_time(best) if best else 'none'}{mark}", flush=True)
+                  f"clean {clean:2d}/{len(res)}  stints survived {surv:4.0%} at noise {noise['act']:.3f}/{noise['obs']:.3f}  "
+                  f"mean net {fmt(mean['laps'])}  |  best {fevo.format_lap_time(best) if best else 'none'}{mark}", flush=True)
+            # Curriculum: once most noisy stints survive, make the mistakes bigger.
+            if practice and surv >= survive and (noise["act"] or noise["obs"]):
+                noise = {k: min(noise_max, v_ * noise_up) for k, v_ in noise.items()}
+            if robust_every and gen % robust_every == 0:
+                # How many nudged copies of the mean network still finish all three official starts.
+                line = []
+                for sg in (1e-3, 3e-3):
+                    probes = [x + sg * rng.standard_normal(len(x)) for _ in range(8)]
+                    rr = pool.map(_eval, [(base, c, [], {}) for c in probes])
+                    line.append(f"{sg:g}: {sum(r['clean'] for r in rr)}/8")
+                print(f"robustness at gen {gen}: weight nudges that still finish all three starts  " + "  ".join(line), flush=True)
             if gen % 5 == 0 or mark:
-                state_file.write_bytes(pickle.dumps({"x": x, "m": m, "v": v, "gen": gen, "best": best, "rng": rng}))
+                state_file.write_bytes(pickle.dumps({"x": x, "m": m, "v": v, "gen": gen, "best": best, "rng": rng, "noise": noise}))
     print(f"\nBest {fevo.format_lap_time(best) if best else 'none'}: {out}", flush=True)
 
 
@@ -177,12 +212,18 @@ def main() -> None:
     ap.add_argument("--practice", type=int, default=4, help="random practice stints per candidate")
     ap.add_argument("--stint", type=int, default=600, help="steps per practice stint")
     ap.add_argument("--crash-s", type=float, default=5.0, help="seconds added to an episode that crashes")
+    ap.add_argument("--act-noise", type=float, default=0.0, help="drifting action error in practice stints (starting level)")
+    ap.add_argument("--obs-noise", type=float, default=0.0, help="observation noise in practice stints (starting level)")
+    ap.add_argument("--noise-max", type=float, default=0.1)
+    ap.add_argument("--noise-up", type=float, default=1.2, help="noise multiplier once enough stints survive")
+    ap.add_argument("--survive", type=float, default=0.8, help="share of surviving stints that raises the noise")
+    ap.add_argument("--robust-every", type=int, default=10, help="report weight-nudge survival every N generations (0: never)")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--fresh", action="store_true")
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     explore(a.track, a.rules, a.baseline, a.name, a.generations, a.pairs, a.sigma, a.lr, a.practice, a.stint, a.crash_s,
-            a.workers, a.seed, a.fresh)
+            a.workers, a.seed, a.fresh, a.act_noise, a.obs_noise, a.noise_max, a.noise_up, a.survive, a.robust_every)
 
 
 if __name__ == "__main__":
