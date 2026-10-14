@@ -35,9 +35,9 @@ MAX_FILE = 500 * 1024
 
 
 class Student(nn.Module):
-    def __init__(self, hidden: list[int]) -> None:
+    def __init__(self, hidden: list[int], n_in: int = 15) -> None:
         super().__init__()
-        dims = [15, *hidden]
+        dims = [n_in, *hidden]
         layers: list[nn.Module] = []
         for a, b in zip(dims, dims[1:]):
             layers += [nn.Linear(a, b), nn.Tanh()]
@@ -50,8 +50,8 @@ class Student(nn.Module):
     @classmethod
     def from_mlp(cls, mlp: dict) -> "Student":
         """A student holding an existing tanh MLP's weights (a warm start)."""
-        assert mlp["activation"] == "tanh" and mlp["outputActivation"] == "identity" and mlp["layers"][0] == 15 and mlp["layers"][-1] == 2
-        st = cls(mlp["layers"][1:-1])
+        assert mlp["activation"] == "tanh" and mlp["outputActivation"] == "identity" and mlp["layers"][-1] == 2
+        st = cls(mlp["layers"][1:-1], mlp["layers"][0])
         lin = [m for m in st.net if isinstance(m, nn.Linear)]
         with torch.no_grad():
             for m, w, b in zip(lin, mlp["weights"], mlp["biases"]):
@@ -62,7 +62,7 @@ class Student(nn.Module):
     def to_mlp(self, setup: dict[str, float] | None, digits: int = 6) -> dict:
         lin = [m for m in self.net if isinstance(m, nn.Linear)]
         r = lambda t: [float(f"{v:.{digits}g}") for v in t.detach().double().flatten().tolist()]  # noqa: E731
-        out = {"layers": [15] + [m.out_features for m in lin], "activation": "tanh", "outputActivation": "identity",
+        out = {"layers": [lin[0].in_features] + [m.out_features for m in lin], "activation": "tanh", "outputActivation": "identity",
                "weights": [r(m.weight) for m in lin], "biases": [r(m.bias) for m in lin]}
         if setup:
             out["setup"] = setup
