@@ -64,5 +64,10 @@ class Expert:
         # Off the line the exact traction limit is a throttle of about 0.01, too fine for a network
         # to copy; a little wheelspin costs almost nothing and is far easier to learn.
         usable = max(usable, 0.15) if vx < 20 else usable
-        throttle = max(-1.0, min(usable, (self.v[ahead] - vx) * 0.4))
+        # No ABS: brake only as hard as the tyres take before locking (load moves forward under braking,
+        # which this ignores, so it's slightly cautious).
+        load_f = car["massKg"] * self.G * (car["wheelbaseM"] - car["cgToFrontM"]) / car["wheelbaseM"] + q * car["downforceAreaM2"] * car["aeroBalanceFront"]
+        max_brake = min(car["tyreMuFront"] * load_f / car["brakeBiasFront"], car["tyreMuRear"] * rear_load / (1 - car["brakeBiasFront"]))
+        brake_limit = min(1.0, 0.9 * max_brake / car["maxBrakeForceN"])
+        throttle = max(-brake_limit, min(usable, (self.v[ahead] - vx) * 0.4))
         return max(-1.0, min(1.0, steer)), throttle

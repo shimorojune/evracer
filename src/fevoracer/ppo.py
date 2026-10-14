@@ -43,11 +43,18 @@ from .paths import CHECKPOINTS, winner_path
 
 @dataclass
 class Daring:
-    """Reward weights. Raise `daring` and `commit` for a braver car."""
+    """Reward weights: what the driver is paid for. Training only; official times are lap time."""
 
-    progress: float = 0.1  # per metre
-    commit: float = 0.5  # progress multiplier per unit of speed / reference speed
-    daring: float = 1.0  # progress multiplier per unit of grip usage squared
+    progress: float = 0.1  # per metre gained along the track
+    #: Progress multiplier for running at the limit: grip usage (cornering, braking and
+    #: drive combined, as a share of what the tyres can give) to the 4th power, so 95%
+    #: pays far more than 80%. Late, hard braking and throwing it into corners both count.
+    daring: float = 2.0
+    #: Progress multiplier for speed against the racing-line reference (the fastest the
+    #: car can go there), also to the 4th power: be at the limit, not near it.
+    commit: float = 1.0
+    #: Per gate: seconds gained (+) or lost (−) against the reference lap over the last 40 m.
+    split: float = 5.0
     crash: float = -20.0
     lap: float = 50.0
     lap_time: float = 0.02  # per step under the lap's step limit
@@ -111,6 +118,11 @@ class RaceEnv:
         self.track = self.sim.load_track(track)
         self.rules = self.sim.rules
         self.ref_speed = fevo.reference(track)["speed"]
+        # Reference time at every centre-line point, for gate-to-gate splits.
+        sp = self.track.raw["spacingM"]
+        self.ref_t = [0.0]
+        for v in self.ref_speed:
+            self.ref_t.append(self.ref_t[-1] + sp / max(1.0, v))
         car = self.rules.car
         self.car = car
         self.d = daring
@@ -181,6 +193,10 @@ class RaceEnv:
             obs = self.sim.reset(1, point=p, lateral_m=self.rng.uniform(-2, 2), heading_rad=self.rng.uniform(-0.05, 0.05), speed=v)
         self.idx = self.sim.progress_index
         self.t = 0
+        self.vx_prev = self.sim.pose()[3]
+        self.gates = self.sim.gates_passed
+        self.gate_step: int | None = None  # step and point of the last gate crossed this episode
+        self.gate_idx = 0
         self.obs = obs + self.snorm
         return self.obs
 
@@ -194,12 +210,26 @@ class RaceEnv:
         moved = ((idx - self.idx + self.n // 2) % self.n - self.n // 2) * self.spacing
         self.idx = idx
         ref = max(5.0, self.ref_at(idx))
-        # Both capped at 1: pay for reaching the limit and the reference speed,
-        # not for going past them (that's sliding off or missing the braking
-        # point, and an uncapped version taught the car never to brake).
-        usage = min(1.0, abs(vx * yaw_rate) / 9.80665 / self.grip_g(vx))
-        bonus = 1.0 + d.daring * usage * usage + d.commit * min(1.0, vx / ref)
+        # Grip usage: cornering and braking/drive combined, against what the tyres can give.
+        # Both bonuses are capped at 1 (going past the limit is sliding, or missing the
+        # braking point; an uncapped version taught the car never to brake), and raised to
+        # the 4th power so the last few percent pay the most.
+        a_lat = vx * yaw_rate
+        a_long = (vx - self.vx_prev) * 60.0
+        self.vx_prev = vx
+        usage = min(1.0, math.hypot(a_lat, a_long) / 9.80665 / self.grip_g(vx))
+        pace = min(1.0, vx / ref)
+        bonus = 1.0 + d.daring * usage**4 + d.commit * pace**4
         r = d.progress * moved * (bonus if moved > 0 else 1.0)
+        gates = int(vals[19])
+        if gates > self.gates:
+            # Gate split against the reference lap: seconds gained pay, seconds lost cost.
+            if self.gate_step is not None:
+                agent_s = (steps - self.gate_step) / 60.0
+                ref_s = (self.ref_t[idx] - self.ref_t[self.gate_idx]) % self.ref_t[-1]
+                r += d.split * (ref_s - agent_s)
+            self.gate_step, self.gate_idx = steps, idx
+        self.gates = gates
         done = status != "running"
         info: dict[str, Any] = {"status": status}
         if status == "finished":
@@ -392,7 +422,7 @@ BC_FADE = 0.4
 ENTROPY = 0.0
 
 
-def train(track: str, total_steps: int, workers: int | None, per_worker: int, daring: Daring, seed: int, resume: bool) -> None:
+def train(track: str, total_steps: int, workers: int | None, per_worker: int, daring: Daring, seed: int, resume: bool, critic_warmup_override: int = 0) -> None:
     torch.manual_seed(seed)
     np.random.seed(seed)
     torch.set_num_threads(1)
@@ -420,7 +450,7 @@ def train(track: str, total_steps: int, workers: int | None, per_worker: int, da
             print(f"widened the network to {policy.in_dim} inputs (setup inputs start at zero)")
             # The starting driver is the fallback until a faster one is found.
             best_state = {"policy": copy.deepcopy(policy.state_dict()), "opt": copy.deepcopy(opt.state_dict())}
-        critic_warmup = state.get("critic_warmup", 0)
+        critic_warmup = max(state.get("critic_warmup", 0), critic_warmup_override)
         best_file = ckpt.with_name("ppo-best.pt")
         if best_file.is_file() and not widened:
             best_state = torch.load(best_file, weights_only=False)

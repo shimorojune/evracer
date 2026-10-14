@@ -54,15 +54,17 @@ def train_ppo() -> None:
     ap.add_argument("--steps", type=float, default=50e6, help="total environment steps")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--envs-per-worker", type=int, default=16)
-    ap.add_argument("--daring", type=float, default=1.0, help="progress multiplier per unit of grip usage squared")
-    ap.add_argument("--commit", type=float, default=0.5, help="progress multiplier per unit of speed / reference")
+    ap.add_argument("--daring", type=float, default=2.0, help="progress multiplier for grip usage^4 (braking, cornering, drive)")
+    ap.add_argument("--commit", type=float, default=1.0, help="progress multiplier for (speed / reference speed)^4")
+    ap.add_argument("--split", type=float, default=5.0, help="reward per second gained against the reference, per gate")
     ap.add_argument("--crash", type=float, default=-20.0)
+    ap.add_argument("--critic-warmup", type=int, default=0, help="value-only updates first (use after changing the reward)")
     ap.add_argument("--fresh", action="store_true")
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     from .ppo import Daring, train
 
-    train(a.track, int(a.steps), a.workers, a.envs_per_worker, Daring(daring=a.daring, commit=a.commit, crash=a.crash), a.seed, not a.fresh)
+    train(a.track, int(a.steps), a.workers, a.envs_per_worker, Daring(daring=a.daring, commit=a.commit, split=a.split, crash=a.crash), a.seed, not a.fresh, a.critic_warmup)
 
 
 def warm_start() -> None:
