@@ -104,6 +104,8 @@ def smooth_inputs() -> None:
     ap.add_argument("--spin", type=float, default=1.0, help="wheelspin weight relative to lock-up")
     ap.add_argument("--slower", type=float, default=5.0, help="extra score per second slower than the baseline lap")
     ap.add_argument("--max-loss", type=float, help="laps more than this many seconds slower than the baseline don't count")
+    ap.add_argument("--pedal", type=float, default=0.0, help="score per unit of throttle travel per lap (smooth throttle)")
+    ap.add_argument("--only", choices=["all", "throttle"], default="all", help="tune every weight, or only the throttle output (steering frozen)")
     ap.add_argument("--restart-after", type=int, default=60, help="generations without a better driver before the step goes back to --sigma")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--fresh", action="store_true", help="ignore the saved search state")
@@ -111,8 +113,8 @@ def smooth_inputs() -> None:
     a = ap.parse_args()
     from .smooth import Score, smooth
 
-    sc = Score(slide=a.slide, spin=a.spin, slower=a.slower, max_loss=a.max_loss)
-    smooth(a.track, a.baseline, a.name, a.generations, a.sigma, a.popsize, sc, a.restart_after, a.workers, a.seed, a.fresh)
+    sc = Score(slide=a.slide, spin=a.spin, slower=a.slower, max_loss=a.max_loss, pedal=a.pedal)
+    smooth(a.track, a.baseline, a.name, a.generations, a.sigma, a.popsize, sc, a.restart_after, a.workers, a.seed, a.fresh, a.only)
 
 
 def _winner(track: str, path: str | None) -> Path:
