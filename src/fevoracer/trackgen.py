@@ -110,8 +110,47 @@ def _fillet(poly: np.ndarray, radii: np.ndarray) -> np.ndarray:
     return _resample(np.array(pts), 1.0)  # the straights are the gaps between consecutive arcs
 
 
-def generate(seed: int, length=(3500.0, 6000.0), min_radius: float = 14.0, clearance: float = 20.0) -> dict | None:
-    """One circuit, or None when the attempt fails a check (callers retry with another seed)."""
+def _slow_features(poly: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+    """Corners a racing line cannot straighten, as real circuits have: on long sides, a hairpin of 150-172 degrees
+    at the tip of a spike (with a near-90-degree corner either side of it) and a sidestep (two tight 90-degree corners
+    the other way round, like a first-corner chicane). Returns the new polygon and fixed radii (nan: random)."""
+    n = len(poly)
+    area = 0.5 * float(np.sum(poly[:, 0] * np.roll(poly[:, 1], -1) - np.roll(poly[:, 0], -1) * poly[:, 1]))
+    orient = 1.0 if area > 0 else -1.0
+    sides = np.linalg.norm(np.roll(poly, -1, 0) - poly, axis=1)
+    long_ = [int(i) for i in rng.permutation(n) if sides[i] > 350]
+    spikes = set(long_[: int(rng.integers(1, 3))])
+    steps = set(long_[len(spikes): len(spikes) + int(rng.random() < 0.6)])
+    out, fixed = [], []
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        out.append(a)
+        fixed.append(np.nan)
+        e = b - a
+        ln = float(np.linalg.norm(e))
+        eh = e / ln
+        out_n = orient * np.array([eh[1], -eh[0]])  # away from the inside of the loop
+        if i in spikes:
+            base = a + e * rng.uniform(0.35, 0.65)
+            depth = rng.uniform(110, 220)
+            turn = math.radians(rng.uniform(150, 172))
+            half = max(depth * math.tan((math.pi - turn) / 2), 22.0)
+            tip = base + out_n * depth * (1 if rng.random() < 0.6 else -1)
+            out += [base - eh * half, tip, base + eh * half]
+            fixed += [rng.uniform(15, 35), rng.uniform(14, 19), rng.uniform(15, 35)]
+        elif i in steps:
+            base = a + e * rng.uniform(0.3, 0.6)
+            off = out_n * rng.uniform(30, 42) * (1 if rng.random() < 0.5 else -1)
+            out += [base, base + off]
+            fixed += [rng.uniform(14, 20), rng.uniform(14, 20)]
+    return np.array(out), np.array(fixed)
+
+
+def generate(seed: int, length=(3500.0, 6000.0), min_radius: float = 14.0, clearance: float = 20.0,
+             slow: bool = False) -> dict | None:
+    """One circuit, or None when the attempt fails a check (callers retry with another seed).
+
+    slow adds hairpins and sidestep chicanes (_slow_features); without it the generator is unchanged."""
     rng = np.random.default_rng(seed)
     hull = _hull(rng.uniform(-1, 1, (int(rng.integers(8, 16)), 2)))
     if len(hull) < 4:
@@ -133,7 +172,12 @@ def generate(seed: int, length=(3500.0, 6000.0), min_radius: float = 14.0, clear
     poly = np.array(pts)
     poly *= rng.uniform(*length) / np.linalg.norm(np.roll(poly, -1, 0) - poly, axis=1).sum()
     # Corner radii: about a quarter slow (hairpins, tight corners), half medium, the rest fast sweepers.
+    fixed = None
+    if slow:
+        poly, fixed = _slow_features(poly, np.random.default_rng([seed, 7]))
     radii = np.exp(rng.uniform(np.log(15), np.log(320), len(poly)))
+    if fixed is not None:
+        radii = np.where(np.isnan(fixed), radii, fixed)
     p = _fillet(poly, radii)
     p = _resample(_smooth(p, passes=1, k=2), 1.0)
     if rng.random() < 0.5:
@@ -177,8 +221,8 @@ def generate(seed: int, length=(3500.0, 6000.0), min_radius: float = 14.0, clear
     gates = [round(i * n / gate_count) for i in range(gate_count)]
     r = lambda v: [round(float(x), 3) for x in v]  # noqa: E731
     body = {
-        "schema": 1, "circuitId": f"gen-{seed}", "revision": 1,
-        "source": {"kind": "generated", "seed": seed, "generator": "fevoracer.trackgen"},
+        "schema": 1, "circuitId": f"{'slow' if slow else 'gen'}-{seed}", "revision": 1,
+        "source": {"kind": "generated", "seed": seed, "generator": "fevoracer.trackgen", **({"slow": True} if slow else {})},
         "officialLengthM": round(length_m), "lengthM": round(length_m, 3), "spacingM": round(length_m / n, 3),
         "centerline": r(p.ravel()), "widthLeft": r(wl), "widthRight": r(wr), "gates": gates,
         "bounds": {"minX": round(float((p[:, 0] - 8).min()), 3), "minY": round(float((p[:, 1] - 8).min()), 3),

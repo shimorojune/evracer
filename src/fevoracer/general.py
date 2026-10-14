@@ -78,11 +78,13 @@ def _init(setup: list[float]) -> None:
 
 
 def _track(spec: str) -> fevo.Track:
-    """gen:<seed> is the first valid generated circuit at or after that seed (most seeds fail a check)."""
-    if not spec.startswith("gen:"):
+    """gen:<seed> (slow:<seed>, with hairpins and sidestep chicanes) is the first valid generated circuit at or after
+    that seed (some seeds fail a check)."""
+    if not spec.startswith(("gen:", "slow:")):
         return realtracks.load(spec)
-    s = int(spec[4:])
-    while (t := trackgen.generate(s)) is None:
+    kind, s = spec.split(":")
+    s = int(s)
+    while (t := trackgen.generate(s, slow=kind == "slow")) is None:
         s += 1
     return trackgen.track(t)
 
@@ -145,7 +147,9 @@ def _rollouts(args: tuple) -> tuple[np.ndarray, np.ndarray, dict]:
     for _ in range(practice):
         if bps and rng.random() < brake_starts:
             # Just before a braking zone at the expert's own speed: practise the whole stop, not only its first metres.
-            p = (int(rng.choice(bps)) - int(rng.integers(0, 200))) % n
+            # Zones into slow corners (90 km/h or less) are picked three times as often: the hardest stops.
+            slow_w = np.array([3.0 if ex.v[(b + np.arange(400)) % n].min() * 3.6 <= 90 else 1.0 for b in bps])
+            p = (int(rng.choice(bps, p=slow_w / slow_w.sum())) - int(rng.integers(0, 200))) % n
             starts.append({"point": p, "lat": float(rng.uniform(-1.0, 1.0)), "hdg": float(rng.uniform(-0.02, 0.02)),
                            "speed": float(rng.uniform(0.95, 1.05) * ex.v[p]), "steps": stint})
             continue
@@ -249,7 +253,7 @@ def weights(X: np.ndarray, Y: np.ndarray, brake_weight: float) -> np.ndarray:
 def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, practice: int, stint: int, hidden: list[int],
           steps: int, lr: float, workers: int | None, seed: int, setup_from: str, init: str | None = None,
           start_round: int = 0, brake_weight: float = 1.0, brake_starts: float = 0.0, expert_share: float = 0.0,
-          seed_rounds: int = 0, data: str | None = None) -> None:
+          seed_rounds: int = 0, data: str | None = None, slow_share: float = 0.0) -> None:
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     rules = fevo.load_rules(RULES)
@@ -274,7 +278,7 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
     t0 = time.time()
     print(f"General driver on {RULES}: student {[len(rules.observation), *hidden, 2]} with inputs {MASKED} masked, braking/corner-entry "
           f"states drawn x{brake_weight}, {brake_starts:.0%} of practice stints start before a braking zone, {expert_share:.0%} of runs all expert, {seed_rounds} expert-only seed rounds, data kept across rounds; per round {gen_per_round} new "
-          f"generated + {real_per_round} of {len(real_train)} real training circuits; held out {held}", flush=True)
+          f"generated ({slow_share:.0%} with hairpins and sidesteps) + {real_per_round} of {len(real_train)} real training circuits; held out {held}", flush=True)
     with mp.get_context("spawn").Pool(workers, initializer=_init, initargs=(setup,)) as pool:
         base = pool.map(_official, [(h, None, True) for h in held])
         expert_laps = {r["track"]: r["expert"] for r in base}
@@ -293,7 +297,10 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
             # The first seed_rounds rounds of a continued run collect expert-driven laps only (the data a fresh run
             # starts with), then the usual schedule takes over.
             beta = 1.0 if r == 0 or r - start_round < seed_rounds else max(0.0, 0.6 - 0.1 * (r - seed_rounds))
-            specs = [f"gen:{int(s)}" for s in rng.integers(1, 800_000, gen_per_round)] + list(rng.choice(real_train, real_per_round, replace=False))
+            n_slow = int(round(slow_share * gen_per_round))
+            specs = ([f"gen:{int(s)}" for s in rng.integers(1, 800_000, gen_per_round - n_slow)]
+                     + [f"slow:{int(s)}" for s in rng.integers(1, 800_000, n_slow)]
+                     + list(rng.choice(real_train, real_per_round, replace=False)))
             mlp = None if r == 0 else student.to_mlp(setup_d)
             res = pool.map(_rollouts, [(s, mlp, beta, practice, stint, int(rng.integers(1 << 30)), brake_starts, expert_share) for s in specs])
             for xs, ys, _ in res:
@@ -310,7 +317,7 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
             # first one). It is scored beside the newly trained network; whichever scores best is kept.
             with torch.no_grad():
                 for pa, ps in zip(avg.parameters(), student.parameters()):
-                    pa.copy_(ps if r == start_round else pa + EMA_RATE * (ps - pa))
+                    pa.copy_(ps if r == start_round and not init else pa + EMA_RATE * (ps - pa))
             ends = [e for _, _, e in res]
             train_done = sum(e.get("status") == "finished" for e in ends)
             print(f"round {r:2d}  beta {beta:.1f}  {sum(len(x) for x in X):9,d} states  loss {loss:.4f}  training laps finished "
@@ -351,12 +358,13 @@ def main() -> None:
     ap.add_argument("--brake-starts", type=float, default=0.0, help="share of practice stints that start just before a braking zone at full speed")
     ap.add_argument("--expert-share", type=float, default=0.0, help="share of runs driven entirely by the expert in every round")
     ap.add_argument("--seed-rounds", type=int, default=0, help="expert-only data rounds before the schedule when continuing (--init)")
+    ap.add_argument("--slow-share", type=float, default=0.0, help="share of the generated circuits with hairpins and sidestep chicanes")
     ap.add_argument("--data", help="start with the kept states a previous run saved (checkpoints/<name>-data.npz)")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     train(a.name, a.rounds, a.gen, a.real, a.practice, a.stint, [int(h) for h in a.hidden.split(",")], a.steps, a.lr,
-          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds, a.data)
+          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds, a.data, a.slow_share)
 
 
 if __name__ == "__main__":
