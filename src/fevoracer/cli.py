@@ -188,11 +188,14 @@ def replay() -> None:
     ap = argparse.ArgumentParser(prog="replay")
     ap.add_argument("files", nargs="*", help="agent JSON files (default: every winner in winners/)")
     ap.add_argument("--track", action="append", choices=fevo.track_ids())
+    ap.add_argument("--rules", action="append", help="rules version(s) to drive on; repeat to show each file on each (default solo-1)")
     ap.add_argument("-o", "--out", default="replay.html")
     ap.add_argument("--no-open", action="store_true")
     a = ap.parse_args()
     files = [Path(f) for f in a.files] or sorted(WINNERS.glob("*.json"))
-    agents = [(f.name, fevo.from_json(f.read_text())) for f in files]
+    rules = a.rules or ["solo-1"]
+    label = (lambda f, r: f"{f.name} [{r}]") if len(rules) > 1 else (lambda f, r: f.name)
+    agents = [(label(f, r), fevo.from_json(f.read_text()), r) for f in files for r in rules]
     out = fevo.write_replay(agents, a.out, a.track)
     print(f"wrote {out}")
     if not a.no_open:
