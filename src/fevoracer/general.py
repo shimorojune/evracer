@@ -5,7 +5,7 @@ DAgger across tracks. Each round takes a fresh batch of generated circuits
 (fevoracer.realtracks), and on each one the full-information expert
 (fevoracer.racer.LineExpert on that track's one-tyre racing line) labels every
 state while a growing share of the driving is done by the student. The student
-is a fresh MLP on solo-4's 28 inputs with the two progress inputs masked (zeroed
+is a fresh MLP on solo-4's 33 inputs with the two progress inputs masked (zeroed
 in the data and their first-layer weights held at zero): it has to read the
 road from the rays, offsets, curvature ahead and its own motion, not remember
 where it is on a lap.
@@ -39,11 +39,21 @@ from .paths import CHECKPOINTS, WINNERS
 from .racer import LineExpert
 
 RULES = "solo-4"
-#: Inputs a general driver must not use: lap progress by gate (index 12) and by metre (index 27).
-MASKED = (12, 27)
+#: Inputs a general driver must not use: lap progress by gate (index 12) and by metre (the last, index 32).
+MASKED = (12, 32)
 EXPERT = {"line_scale": 0.9, "look_s": 0.45, "yaw_damp": 0.08, "k_cross": 1.0, "margin": 0.96, "slow_margin": 0.9}
 CAUTIOUS = {**EXPERT, "line_scale": 0.8, "slow_margin": 0.85}
-HELDOUT_GEN = list(range(900_000, 900_008))  # generator seeds never used for training
+def _distinct_gen(first: int, count: int) -> list[int]:
+    """Seeds of `count` distinct valid generated circuits from `first` on (a failed seed would repeat the next one)."""
+    out, s = [], first
+    while len(out) < count:
+        if trackgen.generate(s) is not None:
+            out.append(s)
+        s += 1
+    return out
+
+
+HELDOUT_GEN = _distinct_gen(900_000, 8)  # generator seeds never used for training
 EXCLUDE_REAL = {"catalunya", "sakhir"}  # the expert crashes at the same metre whatever its setting: data to inspect
 
 _SIM: fevo.Simulator | None = None
@@ -163,7 +173,7 @@ def _official(args: tuple) -> dict:
 
 
 def masked_student(hidden: list[int]) -> Student:
-    st = Student(hidden, 28)
+    st = Student(hidden, len(fevo.load_rules(RULES).observation))
     with torch.no_grad():
         first = [m for m in st.net if isinstance(m, torch.nn.Linear)][0]
         first.weight[:, list(MASKED)] = 0.0
@@ -206,7 +216,7 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
     Y: list[np.ndarray] = []
     best, out = -1.0, WINNERS / f"{name}.json"
     t0 = time.time()
-    print(f"General driver on {RULES}: student {[28, *hidden, 2]} with inputs {MASKED} masked; per round {gen_per_round} new "
+    print(f"General driver on {RULES}: student {[len(rules.observation), *hidden, 2]} with inputs {MASKED} masked; per round {gen_per_round} new "
           f"generated + {real_per_round} of {len(real_train)} real training circuits; held out {held}", flush=True)
     with mp.get_context("spawn").Pool(workers, initializer=_init, initargs=(setup,)) as pool:
         base = pool.map(_official, [(h, None, True) for h in held])
