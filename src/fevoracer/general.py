@@ -70,9 +70,12 @@ _SETUP: list[float] | None = None
 _CACHE: dict[str, tuple[fevo.Track, np.ndarray, dict]] = {}
 
 
-def _init(setup: list[float]) -> None:
+def _init(setup: list[float], no_ramp: bool = False) -> None:
     global _SIM, _SETUP
     torch.set_num_threads(1)
+    if no_ramp:
+        EXPERT.pop("onset_ramp", None)
+        CAUTIOUS.pop("onset_ramp", None)
     _SIM, _SETUP = fevo.Simulator(RULES), setup
     _SIM.set_setup(setup)
 
@@ -253,7 +256,11 @@ def weights(X: np.ndarray, Y: np.ndarray, brake_weight: float) -> np.ndarray:
 def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, practice: int, stint: int, hidden: list[int],
           steps: int, lr: float, workers: int | None, seed: int, setup_from: str, init: str | None = None,
           start_round: int = 0, brake_weight: float = 1.0, brake_starts: float = 0.0, expert_share: float = 0.0,
-          seed_rounds: int = 0, data: str | None = None, slow_share: float = 0.0, data_last: int = 0) -> None:
+          seed_rounds: int = 0, data: str | None = None, slow_share: float = 0.0, data_last: int = 0,
+          mix_share: float = 0.0, no_ramp: bool = False) -> None:
+    if no_ramp:
+        EXPERT.pop("onset_ramp", None)
+        CAUTIOUS.pop("onset_ramp", None)
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     rules = fevo.load_rules(RULES)
@@ -281,7 +288,7 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
     print(f"General driver on {RULES}: student {[len(rules.observation), *hidden, 2]} with inputs {MASKED} masked, braking/corner-entry "
           f"states drawn x{brake_weight}, {brake_starts:.0%} of practice stints start before a braking zone, {expert_share:.0%} of runs all expert, {seed_rounds} expert-only seed rounds, data kept across rounds; per round {gen_per_round} new "
           f"generated ({slow_share:.0%} with hairpins and sidesteps) + {real_per_round} of {len(real_train)} real training circuits; held out {held}", flush=True)
-    with mp.get_context("spawn").Pool(workers, initializer=_init, initargs=(setup,)) as pool:
+    with mp.get_context("spawn").Pool(workers, initializer=_init, initargs=(setup, no_ramp)) as pool:
         base = pool.map(_official, [(h, None, True) for h in held])
         expert_laps = {r["track"]: r["expert"] for r in base}
         print("expert on held-out tracks: " + "  ".join(
@@ -299,9 +306,10 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
             # The first seed_rounds rounds of a continued run collect expert-driven laps only (the data a fresh run
             # starts with), then the usual schedule takes over.
             beta = 1.0 if r == 0 or r - start_round < seed_rounds else max(0.0, 0.6 - 0.1 * (r - seed_rounds))
-            n_slow = int(round(slow_share * gen_per_round))
-            specs = ([f"gen:{int(s)}" for s in rng.integers(1, 800_000, gen_per_round - n_slow)]
+            n_slow, n_mix = int(round(slow_share * gen_per_round)), int(round(mix_share * gen_per_round))
+            specs = ([f"gen:{int(s)}" for s in rng.integers(1, 800_000, gen_per_round - n_slow - n_mix)]
                      + [f"slow:{int(s)}" for s in rng.integers(1, 800_000, n_slow)]
+                     + [f"mix:{int(s)}" for s in rng.integers(1, 800_000, n_mix)]
                      + list(rng.choice(real_train, real_per_round, replace=False)))
             mlp = None if r == 0 else student.to_mlp(setup_d)
             res = pool.map(_rollouts, [(s, mlp, beta, practice, stint, int(rng.integers(1 << 30)), brake_starts, expert_share) for s in specs])
@@ -361,13 +369,15 @@ def main() -> None:
     ap.add_argument("--expert-share", type=float, default=0.0, help="share of runs driven entirely by the expert in every round")
     ap.add_argument("--seed-rounds", type=int, default=0, help="expert-only data rounds before the schedule when continuing (--init)")
     ap.add_argument("--slow-share", type=float, default=0.0, help="share of the generated circuits with hairpins and sidestep chicanes")
+    ap.add_argument("--mix-share", type=float, default=0.0, help="share of the generated circuits in the mix style")
+    ap.add_argument("--no-ramp", action="store_true", help="the expert brakes on a switch, not the onset ramp")
     ap.add_argument("--data-last", type=int, default=0, help="with --data, keep only the most recent N states")
     ap.add_argument("--data", help="start with the kept states a previous run saved (checkpoints/<name>-data.npz)")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     train(a.name, a.rounds, a.gen, a.real, a.practice, a.stint, [int(h) for h in a.hidden.split(",")], a.steps, a.lr,
-          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds, a.data, a.slow_share, a.data_last)
+          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds, a.data, a.slow_share, a.data_last, a.mix_share, a.no_ramp)
 
 
 if __name__ == "__main__":
