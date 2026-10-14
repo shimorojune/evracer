@@ -110,10 +110,14 @@ def _fillet(poly: np.ndarray, radii: np.ndarray) -> np.ndarray:
     return _resample(np.array(pts), 1.0)  # the straights are the gaps between consecutive arcs
 
 
-def _slow_features(poly: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+def _slow_features(poly: np.ndarray, rng: np.random.Generator, mix: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """Corners a racing line cannot straighten, as real circuits have: on long sides, a hairpin of 150-172 degrees
     at the tip of a spike (with a near-90-degree corner either side of it) and a sidestep (two tight 90-degree corners
-    the other way round, like a first-corner chicane). Returns the new polygon and fixed radii (nan: random)."""
+    the other way round, like a first-corner chicane). Returns the new polygon and fixed radii (nan: random).
+
+    mix adds what the general driver met on real circuits and never in training: a sidestep chicane at the end of a
+    long straight, a fast S-kink taken flat (Eau Rouge), and compound corners braked for in two stages (a fast
+    first part, a short plateau, then a tight second part)."""
     n = len(poly)
     area = 0.5 * float(np.sum(poly[:, 0] * np.roll(poly[:, 1], -1) - np.roll(poly[:, 0], -1) * poly[:, 1]))
     orient = 1.0 if area > 0 else -1.0
@@ -121,6 +125,12 @@ def _slow_features(poly: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarr
     long_ = [int(i) for i in rng.permutation(n) if sides[i] > 350]
     spikes = set(long_[: int(rng.integers(1, 3))])
     steps = set(long_[len(spikes): len(spikes) + int(rng.random() < 0.6)])
+    kinks: set[int] = set()
+    late_steps: set[int] = set()
+    if mix:
+        rest = long_[len(spikes) + len(steps):]
+        late_steps = set(rest[: int(rng.random() < 0.7)])
+        kinks = set(rest[len(late_steps): len(late_steps) + int(rng.integers(1, 3))])
     out, fixed = [], []
     for i in range(n):
         a, b = poly[i], poly[(i + 1) % n]
@@ -138,16 +148,51 @@ def _slow_features(poly: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarr
             tip = base + out_n * depth * (1 if rng.random() < 0.6 else -1)
             out += [base - eh * half, tip, base + eh * half]
             fixed += [rng.uniform(15, 35), rng.uniform(14, 19), rng.uniform(15, 35)]
-        elif i in steps:
-            base = a + e * rng.uniform(0.3, 0.6)
+        elif i in kinks:
+            # Flat-out S: three small sideways offsets, alternating, on gentle radii.
+            u0, gap = rng.uniform(0.25, 0.5), rng.uniform(60, 110) / ln
+            sgn = 1 if rng.random() < 0.5 else -1
+            for q in range(3):
+                out.append(a + e * (u0 + q * gap) + out_n * sgn * (-1) ** q * rng.uniform(6, 14))
+                fixed.append(rng.uniform(90, 200))
+        elif i in steps or i in late_steps:
+            base = a + e * (rng.uniform(0.7, 0.85) if i in late_steps else rng.uniform(0.3, 0.6))
             off = out_n * rng.uniform(30, 42) * (1 if rng.random() < 0.5 else -1)
             out += [base, base + off]
             fixed += [rng.uniform(14, 20), rng.uniform(14, 20)]
-    return np.array(out), np.array(fixed)
+    out_a, fixed_a = np.array(out), np.array(fixed)
+    if mix:
+        out_a, fixed_a = _compound(out_a, fixed_a, rng)
+    return out_a, fixed_a
+
+
+def _compound(poly: np.ndarray, fixed: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+    """Split one or two corners of 60-150 degrees into a fast part and a tight part 60-140 m apart (two braking
+    stages): the corner point moves back along the way in (fast, large radius) and a second point goes just after it
+    on the way out (tight)."""
+    n = len(poly)
+    turns, sides = [], np.linalg.norm(np.roll(poly, -1, 0) - poly, axis=1)
+    for i in range(n):
+        u1, u2 = poly[i] - poly[i - 1], poly[(i + 1) % n] - poly[i]
+        turns.append(abs(math.atan2(u1[0] * u2[1] - u1[1] * u2[0], float(np.dot(u1, u2)))))
+    cand = [i for i in rng.permutation(n) if math.radians(60) <= turns[i] <= math.radians(150)
+            and sides[i - 1] > 300 and sides[i] > 150]
+    pick = set(cand[: int(rng.integers(1, 3))])
+    out, fx = [], []
+    for i in range(n):
+        if i not in pick:
+            out.append(poly[i])
+            fx.append(fixed[i])
+            continue
+        u1 = (poly[i] - poly[i - 1]) / sides[i - 1]
+        u2 = (poly[(i + 1) % n] - poly[i]) / sides[i]
+        out += [poly[i] - u1 * rng.uniform(60, min(140, 0.4 * sides[i - 1])), poly[i] + u2 * rng.uniform(15, min(35, 0.3 * sides[i]))]
+        fx += [rng.uniform(60, 120), rng.uniform(14, 22)]
+    return np.array(out), np.array(fx)
 
 
 def generate(seed: int, length=(3500.0, 6000.0), min_radius: float = 14.0, clearance: float = 20.0,
-             slow: bool = False) -> dict | None:
+             slow: bool = False, mix: bool = False) -> dict | None:
     """One circuit, or None when the attempt fails a check (callers retry with another seed).
 
     slow adds hairpins and sidestep chicanes (_slow_features); without it the generator is unchanged."""
@@ -173,8 +218,8 @@ def generate(seed: int, length=(3500.0, 6000.0), min_radius: float = 14.0, clear
     poly *= rng.uniform(*length) / np.linalg.norm(np.roll(poly, -1, 0) - poly, axis=1).sum()
     # Corner radii: about a quarter slow (hairpins, tight corners), half medium, the rest fast sweepers.
     fixed = None
-    if slow:
-        poly, fixed = _slow_features(poly, np.random.default_rng([seed, 7]))
+    if slow or mix:
+        poly, fixed = _slow_features(poly, np.random.default_rng([seed, 7]), mix=mix)
     radii = np.exp(rng.uniform(np.log(15), np.log(320), len(poly)))
     if fixed is not None:
         radii = np.where(np.isnan(fixed), radii, fixed)
@@ -221,8 +266,8 @@ def generate(seed: int, length=(3500.0, 6000.0), min_radius: float = 14.0, clear
     gates = [round(i * n / gate_count) for i in range(gate_count)]
     r = lambda v: [round(float(x), 3) for x in v]  # noqa: E731
     body = {
-        "schema": 1, "circuitId": f"{'slow' if slow else 'gen'}-{seed}", "revision": 1,
-        "source": {"kind": "generated", "seed": seed, "generator": "fevoracer.trackgen", **({"slow": True} if slow else {})},
+        "schema": 1, "circuitId": f"{'mix' if mix else 'slow' if slow else 'gen'}-{seed}", "revision": 1,
+        "source": {"kind": "generated", "seed": seed, "generator": "fevoracer.trackgen", **({"mix": True} if mix else {"slow": True} if slow else {})},
         "officialLengthM": round(length_m), "lengthM": round(length_m, 3), "spacingM": round(length_m / n, 3),
         "centerline": r(p.ravel()), "widthLeft": r(wl), "widthRight": r(wr), "gates": gates,
         "bounds": {"minX": round(float((p[:, 0] - 8).min()), 3), "minY": round(float((p[:, 1] - 8).min()), 3),

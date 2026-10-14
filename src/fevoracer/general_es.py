@@ -92,7 +92,7 @@ def _episodes(args: tuple) -> list[float]:
 
 def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: float, gen_tracks: int, slow_tracks: int,
         real_tracks: int, stints: int, stint: int, crash_s: float, eval_every: int, chunk: int, workers: int | None,
-        seed: int, fresh: bool) -> None:
+        seed: int, fresh: bool, mix_tracks: int = 0) -> None:
     rng = np.random.default_rng(seed)
     base = json.load(open(init))
     setup_d = base.get("setup")
@@ -115,7 +115,7 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
         print(f"resumed at generation {gen0}, best held-out completion {best:.1%}", flush=True)
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
     print(f"General ES on {general.RULES}: {len(x)} numbers ({frozen.sum()} frozen), {2 * pairs} candidates a generation, "
-          f"sigma {sigma}, lr {lr}; each generation {gen_tracks} generated + {slow_tracks} slow-corner + {real_tracks} real "
+          f"sigma {sigma}, lr {lr}; each generation {gen_tracks} generated + {slow_tracks} slow-corner + {mix_tracks} mixed + {real_tracks} real "
           f"training circuits, a lap and {stints} braking-zone stints of {stint} steps on each, crash +{crash_s} s; "
           f"held-out scoring every {eval_every} generations", flush=True)
     t0 = time.time()
@@ -141,6 +141,7 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
         for gen in range(gen0 + 1, gen0 + generations + 1):
             specs = ([f"gen:{int(s)}" for s in rng.integers(1, 800_000, gen_tracks)]
                      + [f"slow:{int(s)}" for s in rng.integers(1, 800_000, slow_tracks)]
+                     + [f"mix:{int(s)}" for s in rng.integers(1, 800_000, mix_tracks)]
                      + list(rng.choice(real_train, real_tracks, replace=False)))
             tg = time.time()
             prep = pool.map(_prep, specs)
@@ -202,6 +203,7 @@ def main() -> None:
     ap.add_argument("--gen-tracks", type=int, default=3)
     ap.add_argument("--slow-tracks", type=int, default=3)
     ap.add_argument("--real-tracks", type=int, default=3)
+    ap.add_argument("--mix-tracks", type=int, default=0, help="circuits with late chicanes, fast kinks and compound corners")
     ap.add_argument("--stints", type=int, default=4, help="braking-zone stints per circuit")
     ap.add_argument("--stint", type=int, default=400)
     ap.add_argument("--crash-s", type=float, default=5.0)
@@ -212,7 +214,7 @@ def main() -> None:
     ap.add_argument("--fresh", action="store_true")
     a = ap.parse_args()
     run(a.init, a.name, a.generations, a.pairs, a.sigma, a.lr, a.gen_tracks, a.slow_tracks, a.real_tracks, a.stints,
-        a.stint, a.crash_s, a.eval_every, a.chunk, a.workers, a.seed, a.fresh)
+        a.stint, a.crash_s, a.eval_every, a.chunk, a.workers, a.seed, a.fresh, a.mix_tracks)
 
 
 if __name__ == "__main__":

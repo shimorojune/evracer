@@ -80,11 +80,11 @@ def _init(setup: list[float]) -> None:
 def _track(spec: str) -> fevo.Track:
     """gen:<seed> (slow:<seed>, with hairpins and sidestep chicanes) is the first valid generated circuit at or after
     that seed (some seeds fail a check)."""
-    if not spec.startswith(("gen:", "slow:")):
+    if not spec.startswith(("gen:", "slow:", "mix:")):
         return realtracks.load(spec)
     kind, s = spec.split(":")
     s = int(s)
-    while (t := trackgen.generate(s, slow=kind == "slow")) is None:
+    while (t := trackgen.generate(s, slow=kind == "slow", mix=kind == "mix")) is None:
         s += 1
     return trackgen.track(t)
 
