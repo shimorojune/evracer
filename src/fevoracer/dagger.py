@@ -83,20 +83,21 @@ def rollout(sim: fevo.Simulator, expert: LineExpert, student: Student | None, st
     return xs, ys, fevo.sim.STATUS[code], sim.progress_index
 
 
-def fit(student: Student, X: np.ndarray, Y: np.ndarray, epochs: int, lr: float, steer_weight: float) -> float:
+def fit(student: Student, X: np.ndarray, Y: np.ndarray, steps: int, lr: float, steer_weight: float, batch: int = 1024) -> float:
+    """`steps` minibatch updates (Adam, learning rate decayed tenfold by the end); returns the full-data loss."""
     opt = torch.optim.Adam(student.parameters(), lr=lr)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps, eta_min=lr / 10)
     Xt, Yt = torch.as_tensor(X), torch.as_tensor(Y)
     w = torch.tensor([steer_weight, 1.0])
-    loss = torch.tensor(0.0)
-    for _ in range(epochs):
-        perm = torch.randperm(len(Xt))
-        for s in range(0, len(Xt), 4096):
-            i = perm[s : s + 4096]
-            loss = ((student(Xt[i]) - Yt[i]).pow(2) * w).mean()
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-    return float(loss.detach())
+    for _ in range(steps):
+        i = torch.randint(len(Xt), (batch,))
+        loss = ((student(Xt[i]) - Yt[i]).pow(2) * w).mean()
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+        sched.step()
+    with torch.no_grad():
+        return float(((student(Xt) - Yt).pow(2) * w).mean())
 
 
 def official(mlp: dict, track: str, rules: str) -> fevo.OfficialResult:
@@ -104,7 +105,7 @@ def official(mlp: dict, track: str, rules: str) -> fevo.OfficialResult:
 
 
 def dagger(track_id: str, rules: str, setup_from: str | None, name: str, rounds: int, hidden: list[int], practice: int,
-           epochs: int, lr: float, steer_weight: float, seed: int, expert_kw: dict) -> None:
+           steps: int, lr: float, steer_weight: float, seed: int, expert_kw: dict) -> None:
     torch.manual_seed(seed)
     rng = random.Random(seed)
     sim = fevo.Simulator(rules)
@@ -134,7 +135,7 @@ def dagger(track_id: str, rules: str, setup_from: str | None, name: str, rounds:
             Y += ys
             if "seed" in st:
                 ends.append(status if status == "finished" else f"{status}@{idx}")
-        loss = fit(student, np.array(X, dtype=np.float32), np.array(Y, dtype=np.float32), epochs, lr, steer_weight)
+        loss = fit(student, np.array(X, dtype=np.float32), np.array(Y, dtype=np.float32), steps, lr, steer_weight)
         mlp = student.to_mlp(setup_d)
         res = official(mlp, track_id, rules)
         clean = all(l.finished for l in res.laps)
@@ -161,7 +162,7 @@ def main() -> None:
     ap.add_argument("--rounds", type=int, default=12)
     ap.add_argument("--hidden", default="128,128")
     ap.add_argument("--practice", type=int, default=120, help="practice starts per round")
-    ap.add_argument("--epochs", type=int, default=15)
+    ap.add_argument("--steps", type=int, default=20000, help="minibatch updates per round")
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--steer-weight", type=float, default=4.0)
     ap.add_argument("--expert", default="{}", help="LineExpert keyword arguments as JSON")
@@ -169,7 +170,7 @@ def main() -> None:
     a = ap.parse_args()
     if os.path.abspath(winner_path(a.name, a.track)) in {os.path.abspath(p) for p in [a.setup_from or ""]}:
         raise SystemExit("--name would overwrite --setup-from")
-    dagger(a.track, a.rules, a.setup_from, a.name, a.rounds, [int(h) for h in a.hidden.split(",")], a.practice, a.epochs, a.lr,
+    dagger(a.track, a.rules, a.setup_from, a.name, a.rounds, [int(h) for h in a.hidden.split(",")], a.practice, a.steps, a.lr,
            a.steer_weight, a.seed, json.loads(a.expert))
 
 

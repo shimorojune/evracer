@@ -44,12 +44,13 @@ class LineExpert:
                  grip_use: float = 0.95, look_s: float = 0.30, look_min: float = 6.0, speed_look_s: float = 0.12,
                  kp: float = 3.0, yaw_damp: float = 0.02, line_scale: float = 0.9, k_cross: float = 2.0,
                  brake_on: float = 0.9, drive_use: float = 0.9, lift_on_slide: bool = True, slow_margin: float = 0.9,
-                 slow_below: float = 30.0) -> None:
+                 slow_below: float = 30.0, launch_min: float = 0.15, launch_below: float = 20.0) -> None:
         self.car = car = rules.car_for(setup)
         # The reference line keeps 1.45 m from the edges (0.5 m outside the car's half width): pull it in a little.
         _, c, self.nl, off, _ = ref_line(track)
         self.p = c + self.nl * (off * line_scale)[:, None]
         self.k_cross, self.brake_on, self.drive_use, self.lift_on_slide = k_cross, brake_on, drive_use, lift_on_slide
+        self.launch_min, self.launch_below = launch_min, launch_below
         self.n = len(self.p)
         # The margin goes on cornering speeds only: straights stay flat out and braking stays at the limit.
         # Slow corners (below slow_below m/s) get a bigger one: there the car is limited by steering lock and
@@ -136,9 +137,13 @@ class LineExpert:
             # power slide is caught by closing the throttle, not by easing off).
             capr_d = capr / self.grip_use * self.drive_use
             drive = min(f_need, math.sqrt(max(0.0, capr_d * capr_d - fyr * fyr)))
-            if self.lift_on_slide and c("getRearSlide") > 0:
+            if self.lift_on_slide and c("getRearSlide") > 0 and vx >= self.launch_below:
                 drive = 0.0
             throttle = min(1.0, drive * max(vx, 1.0) / car["powerW"])
+            # Off the line the exact traction limit is a throttle of about 0.01, too fine for a network to
+            # copy; a little launch wheelspin costs almost nothing and is far easier to learn.
+            if vx < self.launch_below:
+                throttle = max(throttle, self.launch_min)
         else:
             throttle = -min(-f_need, bmax) / car["maxBrakeForceN"]
         return steer, throttle
