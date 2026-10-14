@@ -196,7 +196,7 @@ def replay() -> None:
     rules = a.rules or ["solo-1"]
     label = (lambda f, r: f"{f.name} [{r}]") if len(rules) > 1 else (lambda f, r: f.name)
     agents = [(label(f, r), fevo.from_json(f.read_text()), r) for f in files for r in rules]
-    out = fevo.write_replay(agents, a.out, a.track)
+    out = fevo.write_replay(agents, a.out, a.track, rules=rules[0])  # the page header names the first rules version
     print(f"wrote {out}")
     if not a.no_open:
         webbrowser.open(out.resolve().as_uri())
