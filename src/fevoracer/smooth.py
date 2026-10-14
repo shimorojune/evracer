@@ -59,9 +59,9 @@ _SIM: fevo.Simulator | None = None
 _TRACK = ""
 
 
-def _init(track: str) -> None:
+def _init(track: str, rules: str = "solo-1") -> None:
     global _SIM, _TRACK
-    _SIM, _TRACK = fevo.Simulator(), track
+    _SIM, _TRACK = fevo.Simulator(rules), track
     _SIM.configure()
     _SIM.load_track(track)
 
@@ -83,10 +83,11 @@ def unflatten(base: dict[str, Any], x: np.ndarray) -> dict[str, Any]:
     return out
 
 
-def measure(mlp: dict[str, Any], sim: fevo.Simulator | None = None, track: str | None = None) -> dict[str, Any]:
+def measure(mlp: dict[str, Any], sim: fevo.Simulator | None = None, track: str | None = None,
+            rules: str = "solo-1") -> dict[str, Any]:
     """Official laps with lock-up and wheelspin seconds (mean per finished lap)."""
     if sim is None:
-        sim = fevo.Simulator()
+        sim = fevo.Simulator(rules)
         sim.configure()
         sim.load_track(track or _TRACK)
     sim.load_program(fevo.from_json(json.dumps(mlp)))
@@ -122,9 +123,12 @@ class Score:
     max_loss: float | None = None  # laps slower than baseline + this don't count
     pedal: float = 0.0  # per unit of throttle travel per lap
 
-    def __call__(self, m: dict[str, Any], base_lap: float) -> float:
+    def __call__(self, m: dict[str, Any], base_lap: float | None) -> float:
         if not m["ranked"]:
             return UNRANKED + 30.0 * (1 - m["gates"] / max(1, m["gate_count"]))
+        if base_lap is None:
+            # The baseline doesn't lap (e.g. a driver moved to new rules): any ranked lap beats it.
+            base_lap = m["lap_s"]
         if self.max_loss is not None and m["lap_s"] > base_lap + self.max_loss + 1e-9:
             return UNRANKED / 2 + m["lap_s"]
         return (m["lap_s"] + self.slide * (m["lock_s"] + self.spin * m["spin_s"])
@@ -161,7 +165,7 @@ def throttle_mask(mlp: dict[str, Any]) -> np.ndarray:
 
 
 def smooth(track: str, baseline: str | None, name: str, generations: int, sigma: float, popsize: int, sc: Score,
-           restart_after: int, workers: int | None, seed: int, fresh: bool, only: str = "all") -> None:
+           restart_after: int, workers: int | None, seed: int, fresh: bool, only: str = "all", rules: str = "solo-1") -> None:
     src = baseline or str(winner_path("practice", track))
     base = json.loads(open(src).read())
     out = winner_path(name, track)
@@ -171,9 +175,9 @@ def smooth(track: str, baseline: str | None, name: str, generations: int, sigma:
     sigma0 = sigma
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
 
-    base_m = measure(base, track=track)
+    base_m = measure(base, track=track, rules=rules)
     base_lap = base_m["lap_s"]
-    print(f"Smooth inputs at {track}. Baseline {os.path.basename(src)}: {fmt(base_m)}", flush=True)
+    print(f"Smooth inputs at {track} ({rules}). Baseline {os.path.basename(src)}: {fmt(base_m)}", flush=True)
     print(sc.describe(base_m["lap_time"]), flush=True)
 
     x0 = flatten(base)
@@ -194,7 +198,7 @@ def smooth(track: str, baseline: str | None, name: str, generations: int, sigma:
 
     t0 = time.time()
     gen = gen0
-    with mp.get_context("spawn").Pool(workers, initializer=_init, initargs=(track,)) as pool:
+    with mp.get_context("spawn").Pool(workers, initializer=_init, initargs=(track, rules)) as pool:
         for gen in range(gen0 + 1, gen0 + generations + 1):
             xs = [best_x + sigma * mask * rng.standard_normal(len(best_x)) for _ in range(popsize)]
             ms = pool.map(_eval, [(base, x) for x in xs])
@@ -227,8 +231,9 @@ def compare() -> None:
     ap = argparse.ArgumentParser(prog="smooth-compare", description="Lap time, lock-up and wheelspin of agent files")
     ap.add_argument("files", nargs="*")
     ap.add_argument("--track", default="spielberg", choices=fevo.track_ids())
+    ap.add_argument("--rules", default="solo-1", help="rules version to drive and score on")
     a = ap.parse_args()
     files = a.files or [str(winner_path("practice", a.track)), str(winner_path("smooth", a.track))]
     for f in files:
         if os.path.isfile(f):
-            print(f"{os.path.relpath(f, WINNERS.parent):<36} {fmt(measure(json.loads(open(f).read()), track=a.track))}")
+            print(f"{os.path.relpath(f, WINNERS.parent):<36} {fmt(measure(json.loads(open(f).read()), track=a.track, rules=a.rules))}")

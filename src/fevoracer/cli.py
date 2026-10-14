@@ -95,6 +95,7 @@ def practice() -> None:
 def smooth_inputs() -> None:
     ap = argparse.ArgumentParser(prog="smooth-inputs", description="Elitist evolution-strategy fine-tune of the practice winner on lap time plus slide time")
     ap.add_argument("--track", default="spielberg", choices=fevo.track_ids())
+    ap.add_argument("--rules", default="solo-1", help="rules version to drive and score on")
     ap.add_argument("--baseline", help="agent file to start from (default winners/practice-<track>.json; never overwritten)")
     ap.add_argument("-g", "--generations", type=int, default=1000)
     ap.add_argument("--sigma", type=float, default=0.0005)
@@ -114,7 +115,8 @@ def smooth_inputs() -> None:
     from .smooth import Score, smooth
 
     sc = Score(slide=a.slide, spin=a.spin, slower=a.slower, max_loss=a.max_loss, pedal=a.pedal)
-    smooth(a.track, a.baseline, a.name, a.generations, a.sigma, a.popsize, sc, a.restart_after, a.workers, a.seed, a.fresh, a.only)
+    smooth(a.track, a.baseline, a.name, a.generations, a.sigma, a.popsize, sc, a.restart_after, a.workers, a.seed, a.fresh, a.only,
+           a.rules)
 
 
 def imitate_throttle() -> None:
