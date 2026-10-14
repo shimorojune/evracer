@@ -56,7 +56,10 @@ class LiveWriter:
             "official": [{"seed": l.seed, "status": l.status, "steps": l.steps, "gates": l.gates_passed} for l in result.laps],
             "lap": {"status": lap.status, "steps": lap.steps, "gates": lap.gates_passed, "every": k,
                     "x": rnd(t["x"], 100), "y": rnd(t["y"], 100), "yaw": rnd(t["yaw"], 1000), "speed": rnd(t["speed"], 10),
-                    "steer": rnd(t["steer"], 100), "throttle": rnd(t["throttle"], 100), "gate": t["gates"][::k]},
+                    "steer": rnd(t["steer"], 100), "throttle": rnd(t["throttle"], 100), "gate": t["gates"][::k],
+                    # Max over each pair of steps, so a one-step lock-up still shows at 30 Hz.
+                    "frontSlide": [round(max(t["frontSlide"][j:j + k]), 2) for j in range(0, len(t["frontSlide"]), k)],
+                    "rearSlide": [round(max(t["rearSlide"][j:j + k]), 2) for j in range(0, len(t["rearSlide"]), k)]},
             "ends": counts, "history": self.history[-400:],
         }  # fmt: skip
         tmp = self.path.with_suffix(".tmp")

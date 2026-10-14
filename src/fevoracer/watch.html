@@ -115,8 +115,17 @@ function header() {
 
 function sample(a, f) { const i = Math.min(a.length - 1, Math.floor(f)), k = f - i, b = a[Math.min(i + 1, a.length - 1)]; return a[i] + (b - a[i]) * k; }
 
-function car(ctx) {
-  ctx.fillStyle = "#111"; for (const [x0, x1] of [[-2.15, -1.35], [1.25, 1.95]]) for (const s of [-1, 1]) ctx.fillRect(x0, s > 0 ? 0.53 : -0.95, x1 - x0, 0.42);
+const LOCK = "#8fd0ff", SPIN = "#ff8a3d";
+const WHEELS = { front: [[1.6, 0.74], [1.6, -0.74]], rear: [[-1.75, 0.74], [-1.75, -0.74]] };
+function tyres(L, i) {
+  const f = (L.frontSlide || [])[i] || 0, r = (L.rearSlide || [])[i] || 0, braking = L.throttle[i] < 0;
+  return { f, r, rc: braking ? LOCK : SPIN, label: f > 0 && r > 0 ? (braking ? "LOCK-UP: ALL FOUR" : "LOCK-UP + WHEELSPIN") : f > 0 ? "FRONT LOCK-UP" : r > 0 ? (braking ? "REAR LOCK-UP" : "WHEELSPIN") : "" };
+}
+function car(ctx, ts) {
+  if (ts) for (const [axle, k] of [["front", ts.f], ["rear", ts.r]]) { if (k <= 0) continue;
+    for (const [wx, wy] of WHEELS[axle]) for (let j = 1; j <= 4; j++) { ctx.beginPath(); ctx.arc(wx - j * 0.7, wy, 0.35 + 0.25 * j * k, 0, 2 * Math.PI); ctx.fillStyle = `rgba(235,240,245,${(0.35 * k / j).toFixed(3)})`; ctx.fill(); } }
+  for (const [x0, x1, axle] of [[-2.15, -1.35, "rear"], [1.25, 1.95, "front"]]) { const k = ts ? (axle === "front" ? ts.f : ts.r) : 0;
+    ctx.fillStyle = k > 0 ? (axle === "front" ? LOCK : ts.rc) : "#111"; for (const s of [-1, 1]) ctx.fillRect(x0, s > 0 ? 0.53 : -0.95, x1 - x0, 0.42); }
   ctx.fillStyle = "#121417"; ctx.fillRect(-2.65, -0.78, 0.38, 1.56); ctx.fillRect(2.33, -0.9, 0.32, 1.8);
   ctx.fillStyle = "#1f5fd6"; ctx.beginPath(); const pts = [[2.45, 0.1], [1.3, 0.2], [0.7, 0.42], [-0.2, 0.62], [-1.2, 0.55], [-2.25, 0.28]];
   ctx.moveTo(2.6, 0); for (const [x, y] of pts) ctx.lineTo(x, y); for (const [x, y] of [...pts].reverse()) ctx.lineTo(x, -y); ctx.closePath(); ctx.fill();
@@ -133,7 +142,14 @@ function drawCam() {
   ctx.lineWidth = 0.3; ctx.strokeStyle = "#fff"; ctx.stroke(geo.left); ctx.stroke(geo.right);
   ctx.setLineDash([2, 2]); ctx.lineWidth = 0.25; ctx.strokeStyle = "rgba(255,209,102,.6)"; ctx.stroke(geo.racing); ctx.setLineDash([]);
   ctx.beginPath(); const from = Math.max(0, Math.floor(f) - 180); for (let i = from; i <= Math.floor(f); i++) i === from ? ctx.moveTo(L.x[i], L.y[i]) : ctx.lineTo(L.x[i], L.y[i]); ctx.strokeStyle = "rgba(31,95,214,.7)"; ctx.lineWidth = 0.35; ctx.stroke();
-  ctx.save(); ctx.translate(x, y); let a = L.yaw[Math.floor(f)]; ctx.rotate(a); car(ctx); ctx.restore();
+  ctx.lineWidth = 0.3;
+  for (let i = Math.max(1, Math.floor(f) - 600); i <= Math.floor(f); i++) {
+    for (const [axle, k] of [["front", (L.frontSlide || [])[i] || 0], ["rear", (L.rearSlide || [])[i] || 0]]) { if (k <= 0) continue;
+      ctx.strokeStyle = `rgba(10,10,12,${(0.25 + 0.5 * k).toFixed(2)})`;
+      for (const [wx, wy] of WHEELS[axle]) { const at = (j) => [L.x[j] + Math.cos(L.yaw[j]) * wx - Math.sin(L.yaw[j]) * wy, L.y[j] + Math.sin(L.yaw[j]) * wx + Math.cos(L.yaw[j]) * wy];
+        const [x0, y0] = at(i - 1), [x1, y1] = at(i); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); } } }
+  const ts = tyres(L, Math.floor(f));
+  ctx.save(); ctx.translate(x, y); let a = L.yaw[Math.floor(f)]; ctx.rotate(a); car(ctx, ts); ctx.restore();
   const ended = f >= L.x.length - 1 && L.status !== "finished";
   if (ended) { ctx.strokeStyle = "#c2372b"; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(x - 3, y - 3); ctx.lineTo(x + 3, y + 3); ctx.moveTo(x - 3, y + 3); ctx.lineTo(x + 3, y - 3); ctx.stroke(); }
   ctx.setTransform(d, 0, 0, d, 0, 0); ctx.fillStyle = "#121417"; ctx.font = "600 15px Chivo";
@@ -142,6 +158,7 @@ function drawCam() {
   ctx.font = "13px Chivo"; ctx.fillStyle = L.throttle[i] >= 0 ? "#1e8e4e" : "#c2372b";
   ctx.fillText(`${L.throttle[i] >= 0 ? "throttle" : "brake"} ${Math.abs(L.throttle[i]).toFixed(2)}   steer ${L.steer[i].toFixed(2)}`, 14, 44);
   if (ended) { ctx.fillStyle = "#c2372b"; ctx.font = "600 15px Chivo"; ctx.fillText(L.status.toUpperCase(), 14, 66); }
+  else if (ts.label) { ctx.fillStyle = ts.f > 0 || ts.rc === LOCK ? "#2f8fd6" : "#d9622b"; ctx.font = "600 15px Chivo"; ctx.fillText(ts.label, 14, 66); }
 }
 
 function drawMap() {
