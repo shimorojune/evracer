@@ -38,6 +38,7 @@ import numpy as np
 import fevo
 
 from .gap import curvature, qss, ref_line
+from .line import normals
 
 
 class LineExpert:
@@ -47,11 +48,17 @@ class LineExpert:
                  brake_on: float = 0.9, drive_use: float = 0.9, lift_on_slide: bool = True, slow_margin: float = 0.9,
                  slow_below: float = 30.0, launch_min: float = 0.15, launch_below: float = 20.0,
                  understeer_cut: float = 0.0, observable: bool = False, k_head: float = 1.0, k_e: float = 2.5,
-                 ff_look_s: float = 0.1, brake_plan: float = 1.0, line_file: str | None = None) -> None:
+                 ff_look_s: float = 0.1, brake_plan: float = 1.0, line_file: str | None = None,
+                 offsets: np.ndarray | None = None) -> None:
         self.car = car = rules.car_for(setup)
         # The reference line keeps 1.45 m from the edges (0.5 m outside the car's half width): pull it in a little.
         # line_file swaps in another line's offsets (e.g. the wider solo-3 line from tools/calibrate's racingLine).
-        _, c, self.nl, off, _ = ref_line(track)
+        # offsets gives the line directly (any track, e.g. fevoracer.line.racing_line on a generated circuit).
+        if offsets is not None:
+            c, self.nl = normals(track)
+            off = np.asarray(offsets, dtype=float)
+        else:
+            _, c, self.nl, off, _ = ref_line(track)
         if line_file:
             off = np.array(json.load(open(line_file))["offsetLeftM"])
         self.p = c + self.nl * (off * line_scale)[:, None]
