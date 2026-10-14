@@ -49,7 +49,7 @@ class LineExpert:
                  slow_below: float = 30.0, launch_min: float = 0.15, launch_below: float = 20.0,
                  understeer_cut: float = 0.0, observable: bool = False, k_head: float = 1.0, k_e: float = 2.5,
                  ff_look_s: float = 0.1, brake_plan: float = 1.0, line_file: str | None = None,
-                 offsets: np.ndarray | None = None) -> None:
+                 offsets: np.ndarray | None = None, brake_latch: float = 0.0) -> None:
         self.car = car = rules.car_for(setup)
         # The reference line keeps 1.45 m from the edges (0.5 m outside the car's half width): pull it in a little.
         # line_file swaps in another line's offsets (e.g. the wider solo-3 line from tools/calibrate's racingLine).
@@ -86,6 +86,11 @@ class LineExpert:
         self.grip_use, self.look_s, self.look_min, self.speed_look_s = grip_use, look_s, look_min, speed_look_s
         self.kp, self.yaw_damp = kp, yaw_damp
         self.hz = rules.agent_hz
+        # brake_latch > 0: once braking starts it holds until the needed deceleration falls below this share of
+        # capacity, braking with exactly the needed force (coasting when none is needed) and never blipping the
+        # throttle, so the labels a student learns from change smoothly through a braking zone.
+        self.brake_latch = brake_latch
+        self.braking = False
         self.j = 0
         self.vx_prev = 0.0
 
@@ -140,6 +145,7 @@ class LineExpert:
     def reset(self) -> None:
         self.j = 0
         self.vx_prev = 0.0
+        self.braking = False
 
     def _nearest(self, x: float, y: float, idx: int) -> int:
         lo = idx - 30
@@ -201,7 +207,16 @@ class LineExpert:
         v_t = self.v[ahead]
         bias = car["brakeBiasFront"]
         bmax = min(long_f / bias, long_r / (1 - bias), car["maxBrakeForceN"])
-        if need_dec * m > self.brake_on * (bmax + drag):
+        if self.brake_latch > 0:
+            cap = bmax + drag
+            if not self.braking and need_dec * m > self.brake_on * cap:
+                self.braking = True
+            elif self.braking and need_dec * m < self.brake_latch * cap:
+                self.braking = False
+            if self.braking:
+                return steer, -min(max(0.0, need_dec * m - drag), bmax) / car["maxBrakeForceN"]
+            f_need = m * self.kp * (v_t - vx) + drag
+        elif need_dec * m > self.brake_on * (bmax + drag):
             f_need = -(need_dec * m - drag)
         else:
             f_need = m * self.kp * (v_t - vx) + drag

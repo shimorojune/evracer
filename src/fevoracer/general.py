@@ -43,7 +43,8 @@ RULES = "solo-4"
 MASKED = (12, 32)
 #: solo-4's next-corner distance input (/ 600 m): under 0.5 means a corner within 300 m.
 NEXT_CORNER = 30
-EXPERT = {"line_scale": 0.9, "look_s": 0.45, "yaw_damp": 0.08, "k_cross": 1.0, "margin": 0.96, "slow_margin": 0.9}
+EXPERT = {"line_scale": 0.9, "look_s": 0.45, "yaw_damp": 0.08, "k_cross": 1.0, "margin": 0.96, "slow_margin": 0.9,
+          "brake_latch": 0.3}
 CAUTIOUS = {**EXPERT, "line_scale": 0.8, "slow_margin": 0.85}
 def _distinct_gen(first: int, count: int) -> list[int]:
     """Seeds of `count` distinct valid generated circuits from `first` on (a failed seed would repeat the next one)."""
