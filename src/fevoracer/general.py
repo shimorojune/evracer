@@ -21,6 +21,7 @@ progress goes to winners/<name>.json.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import multiprocessing as mp
 import os
@@ -46,6 +47,11 @@ NEXT_CORNER = 30
 EXPERT = {"line_scale": 0.9, "look_s": 0.45, "yaw_damp": 0.08, "k_cross": 1.0, "margin": 0.96, "slow_margin": 0.9,
           "brake_latch": 0.3}
 CAUTIOUS = {**EXPERT, "line_scale": 0.8, "slow_margin": 0.85}
+#: Held-out scoring drives the three official starts plus these (lateral m, heading rad at the start line; the rules
+#: have only three starts, ±0.5 m and centre), so one crash moves the score less.
+EXTRA_STARTS = ((-1.0, 0.01), (1.0, -0.01))
+#: Across rounds the averaged driver moves this share of the way to each newly trained network.
+EMA_RATE = 0.5
 def _distinct_gen(first: int, count: int) -> list[int]:
     """Seeds of `count` distinct valid generated circuits from `first` on (a failed seed would repeat the next one)."""
     out, s = [], first
@@ -173,7 +179,7 @@ def _rollouts(args: tuple) -> tuple[np.ndarray, np.ndarray, dict]:
 
 
 def _official(args: tuple) -> dict:
-    """The student's official laps on one track (all three starts), and the expert's for comparison."""
+    """The student's laps on one track (the three official starts and EXTRA_STARTS), and the expert's official ones."""
     spec, student_mlp, with_expert = args
     tr, ex, _ = _expert_for(spec)
     sim = _SIM
@@ -181,8 +187,11 @@ def _official(args: tuple) -> dict:
     out = {"track": spec, "laps": [], "expert": []}
     if student_mlp is not None:
         sim.load_program(fevo.from_json(json.dumps(student_mlp)))
-        for s in range(3):
-            sim.reset(s)
+        for s in (0, 1, 2, *EXTRA_STARTS):
+            if isinstance(s, int):
+                sim.reset(s)
+            else:
+                sim.reset(1, lateral_m=s[0], heading_rad=s[1])
             st = sim.run_agent_lap()
             out["laps"].append((st, sim.steps, sim.progress_index / tr.points))
     for s in range(3 if with_expert else 0):
@@ -209,20 +218,26 @@ def _hold_mask(st: Student) -> None:
         [m for m in st.net if isinstance(m, torch.nn.Linear)][0].weight[:, list(MASKED)] = 0.0
 
 
-def summarise(res: list[dict], hz: int = 60) -> tuple[str, float]:
-    """One line per track group and a single score: mean share of the lap completed over all held-out laps."""
-    parts, prog = [], []
+def summarise(res: list[dict], hz: int = 60) -> tuple[str, float, int, int]:
+    """One entry per track, the score (mean share of the lap completed over every held-out lap, official starts and
+    extra ones), and laps finished out of laps driven. A track whose three official laps all finish shows their median
+    against the expert's; otherwise laps finished / driven and the mean completion."""
+    parts, prog, fin, total = [], [], 0, 0
     for r in res:
         done = [s for st, s, _ in r["laps"] if st == "finished"]
+        off = [s for st, s, _ in r["laps"][:3] if st == "finished"]
         ex = sorted(s for st, s in r["expert"] if st == "finished")
-        prog += [1.0 if st == "finished" else p for st, _, p in r["laps"]]
+        comp = [1.0 if st == "finished" else p for st, _, p in r["laps"]]
+        prog += comp
+        fin, total = fin + len(done), total + len(r["laps"])
         lab = r["track"].replace("gen:", "g")
-        if len(done) == 3:
-            med = sorted(done)[1]
-            parts.append(f"{lab} {fevo.format_lap_time(med)}" + (f" ({100 * (med / ex[1] - 1):+.0f}%)" if len(ex) == 3 else ""))
+        if len(off) == 3:
+            med = sorted(off)[1]
+            parts.append(f"{lab} {fevo.format_lap_time(med)}" + (f" ({100 * (med / ex[1] - 1):+.0f}%)" if len(ex) == 3 else "")
+                         + ("" if len(done) == len(comp) else f" {len(done)}/{len(comp)}"))
         else:
-            parts.append(f"{lab} {len(done)}/3 ({np.mean([1.0 if st == 'finished' else p for st, _, p in r['laps']]):.0%})")
-    return "  ".join(parts), float(np.mean(prog)) if prog else 0.0
+            parts.append(f"{lab} {len(done)}/{len(comp)} ({np.mean(comp):.0%})")
+    return "  ".join(parts), float(np.mean(prog)) if prog else 0.0, fin, total
 
 
 def weights(X: np.ndarray, Y: np.ndarray, brake_weight: float) -> np.ndarray:
@@ -234,7 +249,7 @@ def weights(X: np.ndarray, Y: np.ndarray, brake_weight: float) -> np.ndarray:
 def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, practice: int, stint: int, hidden: list[int],
           steps: int, lr: float, workers: int | None, seed: int, setup_from: str, init: str | None = None,
           start_round: int = 0, brake_weight: float = 1.0, brake_starts: float = 0.0, expert_share: float = 0.0,
-          seed_rounds: int = 0) -> None:
+          seed_rounds: int = 0, data: str | None = None) -> None:
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     rules = fevo.load_rules(RULES)
@@ -251,6 +266,10 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
     X: list[np.ndarray] = []
     Y: list[np.ndarray] = []
+    if data:
+        # A previous run's kept states (checkpoints/<name>-data.npz), so a restart does not start from an empty buffer.
+        with np.load(data) as d:
+            X, Y = [d["X"]], [d["Y"]]
     best, out = -1.0, WINNERS / f"{name}.json"
     t0 = time.time()
     print(f"General driver on {RULES}: student {[len(rules.observation), *hidden, 2]} with inputs {MASKED} masked, braking/corner-entry "
@@ -267,8 +286,9 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
             ev0 = pool.map(_official, [(h, student.to_mlp(setup_d), False) for h in held])
             for e in ev0:
                 e["expert"] = expert_laps[e["track"]]
-            line, best = summarise(ev0)
-            print(f"warm start from {init}: held out {line} | completed {best:.1%}", flush=True)
+            line, best, fin, total = summarise(ev0)
+            print(f"warm start from {init}: held out {line} | completed {best:.1%}, laps finished {fin}/{total}", flush=True)
+        avg = copy.deepcopy(student)
         for r in range(start_round, start_round + rounds + 1):
             # The first seed_rounds rounds of a continued run collect expert-driven laps only (the data a fresh run
             # starts with), then the usual schedule takes over.
@@ -286,22 +306,30 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
             Xa, Ya = np.concatenate(X), np.concatenate(Y)
             loss = fit(student, Xa, Ya, steps, lr, 4.0, sample_weight=weights(Xa, Ya, brake_weight) if brake_weight != 1.0 else None)
             _hold_mask(student)
-            mlp = student.to_mlp(setup_d)
-            ev = pool.map(_official, [(h, mlp, False) for h in held])
-            for e in ev:
-                e["expert"] = expert_laps[e["track"]]
-            line, score = summarise(ev)
-            mark = ""
-            if score > best:
-                best = score
-                out.write_text(json.dumps(mlp) + "\n")
-                mark = "  << new best"
+            # The averaged driver: an exponential moving average of the networks each round trains (it starts as the
+            # first one). It is scored beside the newly trained network; whichever scores best is kept.
+            with torch.no_grad():
+                for pa, ps in zip(avg.parameters(), student.parameters()):
+                    pa.copy_(ps if r == start_round else pa + EMA_RATE * (ps - pa))
             ends = [e for _, _, e in res]
             train_done = sum(e.get("status") == "finished" for e in ends)
             print(f"round {r:2d}  beta {beta:.1f}  {sum(len(x) for x in X):9,d} states  loss {loss:.4f}  training laps finished "
-                  f"{train_done}/{len(ends)}  ({(time.time() - t0) / 60:.1f} min)\n   held out: {line}  | completed {score:.1%}{mark}",
-                  flush=True)
+                  f"{train_done}/{len(ends)}  ({(time.time() - t0) / 60:.1f} min)", flush=True)
+            for label, net in (("new", student), ("avg", avg)):
+                mlp = net.to_mlp(setup_d)
+                ev = pool.map(_official, [(h, mlp, False) for h in held])
+                for e in ev:
+                    e["expert"] = expert_laps[e["track"]]
+                line, score, fin, total = summarise(ev)
+                mark = ""
+                if score > best:
+                    best = score
+                    out.write_text(json.dumps(mlp) + "\n")
+                    mark = "  << new best"
+                print(f"   held out ({label}): {line}  | completed {score:.1%}, laps finished {fin}/{total}{mark}", flush=True)
             torch.save(student.state_dict(), CHECKPOINTS / f"{name}-student.pt")
+            torch.save(avg.state_dict(), CHECKPOINTS / f"{name}-avg.pt")
+            np.savez(CHECKPOINTS / f"{name}-data.npz", X=Xa, Y=Ya)
     print(f"\nBest held-out completion {best:.1%}: {out}", flush=True)
 
 
@@ -323,11 +351,12 @@ def main() -> None:
     ap.add_argument("--brake-starts", type=float, default=0.0, help="share of practice stints that start just before a braking zone at full speed")
     ap.add_argument("--expert-share", type=float, default=0.0, help="share of runs driven entirely by the expert in every round")
     ap.add_argument("--seed-rounds", type=int, default=0, help="expert-only data rounds before the schedule when continuing (--init)")
+    ap.add_argument("--data", help="start with the kept states a previous run saved (checkpoints/<name>-data.npz)")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     train(a.name, a.rounds, a.gen, a.real, a.practice, a.stint, [int(h) for h in a.hidden.split(",")], a.steps, a.lr,
-          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds)
+          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds, a.data)
 
 
 if __name__ == "__main__":
