@@ -69,7 +69,8 @@ class Lap:
     lap_s: float
 
 
-def qss(p: np.ndarray, car: dict[str, float], vehicle: bool, standing: bool, h_curv: int = 3) -> Lap:
+def qss(p: np.ndarray, car: dict[str, float], vehicle: bool, standing: bool, h_curv: int = 3, corner_scale: float = 1.0) -> Lap:
+    """corner_scale < 1 keeps a margin on cornering speeds only; braking and acceleration stay at the limit."""
     n = len(p)
     k = curvature(p, h_curv)
     ds = np.linalg.norm(np.roll(p, -1, 0) - p, axis=1)
@@ -129,7 +130,7 @@ def qss(p: np.ndarray, car: dict[str, float], vehicle: bool, standing: bool, h_c
             ax = (brake + drag(v)) / m
         return ax
 
-    vmax = np.array([vlim(ki) for ki in k] + [vlim(k[0])])
+    vmax = np.array([vlim(ki) for ki in k] + [vlim(k[0])]) * corner_scale
     v = vmax.copy()
     if standing:
         v[0] = 0.0
@@ -165,16 +166,23 @@ def qss(p: np.ndarray, car: dict[str, float], vehicle: bool, standing: bool, h_c
 # --------------------------------------------------------------------------- the agent's lap
 
 
-def drive(sim: fevo.Simulator, seed: int, c: np.ndarray, nl: np.ndarray, hz: int) -> dict[str, np.ndarray]:
+def drive(sim: fevo.Simulator, seed: int, c: np.ndarray, nl: np.ndarray, hz: int, policy=None) -> dict[str, np.ndarray]:
+    """One lap from an official start, by the loaded program or by policy(sim) -> (steer, throttle)."""
     call = sim.core.call
-    sim.reset(seed)
+    obs = sim.reset(seed)
     rows = []
     status = "running"
     while status == "running":
-        status = sim.agent_step()
+        if policy is None:
+            status = sim.agent_step()
+            thr = call("getAgentThrottle")
+        else:
+            steer, thr = policy(sim, obs)
+            status = sim.step(steer, thr)
+            obs = sim.observation()
         i = call("getProgressIndex")
         x, y = call("getX"), call("getY")
-        rows.append((i, call("getVx"), max(-1.0, min(1.0, call("getAgentThrottle"))), call("getFrontSlide"), call("getRearSlide"),
+        rows.append((i, call("getVx"), max(-1.0, min(1.0, thr)), call("getFrontSlide"), call("getRearSlide"),
                      float(np.dot([x, y] - c[i % len(c)], nl[i % len(c)]))))
     r = np.array(rows)
     return {"status": status, "steps": len(rows), "idx": r[:, 0].astype(int), "v": r[:, 1], "thr": r[:, 2], "fs": r[:, 3],
@@ -222,25 +230,11 @@ def corners(v: np.ndarray, drop_kmh: float = 15.0, merge_m: int = 120) -> list[t
     return out
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(prog="gap", description="Where an agent loses time against the reference and the vehicle limit")
-    ap.add_argument("file")
-    ap.add_argument("--track", default="spielberg", choices=fevo.track_ids())
-    ap.add_argument("--rules", default="solo-1")
-    ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--json", help="also write the numbers here")
-    a = ap.parse_args()
-
-    mlp = json.load(open(a.file))
-    sim = fevo.Simulator(a.rules)
-    track = sim.load_track(a.track)
-    prog = fevo.from_json(json.dumps(mlp))
-    sim.load_program(prog)
-    hz = sim.rules.agent_hz
-    rules = sim.rules
-    setup = [mlp["setup"][k["id"]] for k in rules.setup] if "setup" in mlp else None
+def report(name: str, track: fevo.Track, rules: fevo.Rules, setup: list[float] | None, lap: dict, seed: int,
+           json_path: str | None = None) -> dict:
+    """Print the waterfall, the category split and the sector table for one recorded lap (see drive())."""
+    hz = rules.agent_hz
     car_default, car_agent = rules.car, rules.car_for(setup)
-
     p, c, nl, roff, _ = ref_line(track)
     n = len(p)
     # The 1:07.1 reference uses curvature over ±3 m; the shipped offsets are rounded to the millimetre,
@@ -251,17 +245,16 @@ def main() -> None:
     vh_fly_def = qss(p, car_default, vehicle=True, standing=False, h_curv=10)
     vh_fly = qss(p, car_agent, vehicle=True, standing=False, h_curv=10)
     vh = qss(p, car_agent, vehicle=True, standing=True, h_curv=10)
-    lap = drive(sim, a.seed, c, nl, hz)
     ta = time_at(lap, n)
     if lap["status"] != "finished" or np.isnan(ta).any():
-        raise SystemExit(f"seed {a.seed} {lap['status']}; pick a seed that finishes")
+        raise SystemExit(f"seed {seed} {lap['status']}; pick a seed that finishes")
     agent_s = lap["steps"] / hz
     tv = np.concatenate([[0.0], np.cumsum(vh.seg_t)])
     tp = np.concatenate([[0.0], np.cumsum(pm_fly3.seg_t)])  # the published 1:07.1 lap, for the "vs 1:07" column
     loss = np.diff(ta) - vh.seg_t  # per point, sums to agent - vehicle lap
 
-    print(f"{a.file} at {track.name} ({rules.id}), seed {a.seed}: {fevo.format_lap_time(lap['steps'], hz)}")
-    print(f"setup {mlp.get('setup')}: front mu {car_agent['tyreMuFront']:.3f}, rear mu {car_agent['tyreMuRear']:.3f}, "
+    print(f"{name} at {track.name} ({rules.id}), seed {seed}: {fevo.format_lap_time(lap['steps'], hz)}")
+    print(f"setup {dict(zip([k['id'] for k in rules.setup], setup)) if setup else 'default'}: front mu {car_agent['tyreMuFront']:.3f}, rear mu {car_agent['tyreMuRear']:.3f}, "
           f"downforce {car_agent['downforceAreaM2']:.2f} m2, drag {car_agent['dragAreaM2']:.3f} m2, brake bias {car_agent['brakeBiasFront']:.3f}")
     print("\nFrom the 1:07.1 reference to this lap")
     steps = [
@@ -344,8 +337,31 @@ def main() -> None:
               f"{row['full_throttle_m']:>8}{row['achv_accel_m']:>9} | {row['line_dev_m']:>8.2f} | {row['spin_s']:>6.2f}{row['lock_s']:>7.2f}")
     worst = sorted(rows, key=lambda r: -r["loss_s"])[:3]
     print("\nBiggest sector losses to the achievable lap: " + ", ".join(f"{r['sector']} {r['loss_s']:+.2f} s" for r in worst))
-    if a.json:
-        json.dump({"waterfall": dict(steps), "by_category": by_cat, "sectors": rows}, open(a.json, "w"), indent=1, default=float)
+    if json_path:
+        json.dump({"waterfall": dict(steps), "by_category": by_cat, "sectors": rows}, open(json_path, "w"), indent=1, default=float)
+
+    return {"waterfall": dict(steps), "by_category": by_cat, "sectors": rows}
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(prog="gap", description="Where an agent loses time against the reference and the vehicle limit")
+    ap.add_argument("file")
+    ap.add_argument("--track", default="spielberg", choices=fevo.track_ids())
+    ap.add_argument("--rules", default="solo-1")
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--json", help="also write the numbers here")
+    a = ap.parse_args()
+
+    mlp = json.load(open(a.file))
+    sim = fevo.Simulator(a.rules)
+    track = sim.load_track(a.track)
+    prog = fevo.from_json(json.dumps(mlp))
+    sim.load_program(prog)
+    rules = sim.rules
+    setup = [mlp["setup"][k["id"]] for k in rules.setup] if "setup" in mlp else None
+    _, c, nl, _, _ = ref_line(track)
+    lap = drive(sim, a.seed, c, nl, rules.agent_hz)
+    report(a.file, track, rules, setup, lap, a.seed, a.json)
 
 
 if __name__ == "__main__":
