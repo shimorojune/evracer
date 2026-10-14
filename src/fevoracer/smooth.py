@@ -5,21 +5,28 @@ did a control run with no cost at all: any PPO update does). This skips the
 reward and the gradient and scores what we want directly, on the three
 official laps:
 
-  median lap (s) + slide × (lock-up + wheelspin seconds per lap)
+  median lap (s) + slide × (lock-up + spin × wheelspin seconds per lap)
                  + slower × (seconds slower than the baseline lap)
+
+and a lap more than max_loss slower than the baseline doesn't count at all.
+Wheelspin gets its own weight because the first run (from the practice
+winner, equal weights) cut lock-up by a third but let wheelspin creep up:
+getting out of corners faster with a bit more spin scored as a win.
 
 The driver sits on a knife edge: moving every weight by 0.0002 at random
 already crashes four candidates in five, so recombining search (CMA-ES)
 averages crashers into the mean. Instead an elitist (1+λ) evolution strategy
 keeps the best driver so far, tries λ random nudges of it each generation and
 keeps one only if it scores better; the step grows after a success and
-shrinks after a miss.
+shrinks after a miss. After restart_after generations without a better
+driver the step goes back to its starting size (the first run stalled for
+200 generations at the smallest step, then crept on).
 
 Lock-up is any tyre sliding while braking; wheelspin is the rears sliding on
 throttle (the same split as the live viewer). The setup stays as the practice
 session found it. The baseline file is never written; the best candidate goes
-to winners/smooth-<track>.json, and the search state to checkpoints/<track>/
-so a stopped run resumes.
+to winners/<name>-<track>.json, and the search state to
+checkpoints/<track>/<name>-es.pkl so a stopped run resumes.
 """
 
 from __future__ import annotations
@@ -29,6 +36,7 @@ import multiprocessing as mp
 import os
 import pickle
 import time
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -98,10 +106,25 @@ def measure(mlp: dict[str, Any], sim: fevo.Simulator | None = None, track: str |
     }
 
 
-def score(m: dict[str, Any], base_lap: float, slide: float, slower: float) -> float:
-    if not m["ranked"]:
-        return UNRANKED + 30.0 * (1 - m["gates"] / max(1, m["gate_count"]))
-    return m["lap_s"] + slide * (m["lock_s"] + m["spin_s"]) + slower * max(0.0, m["lap_s"] - base_lap)
+@dataclass
+class Score:
+    slide: float = 0.3  # per second of lock-up per lap
+    spin: float = 1.0  # wheelspin weight relative to lock-up
+    slower: float = 5.0  # per second slower than the baseline lap
+    max_loss: float | None = None  # laps slower than baseline + this don't count
+
+    def __call__(self, m: dict[str, Any], base_lap: float) -> float:
+        if not m["ranked"]:
+            return UNRANKED + 30.0 * (1 - m["gates"] / max(1, m["gate_count"]))
+        if self.max_loss is not None and m["lap_s"] > base_lap + self.max_loss + 1e-9:
+            return UNRANKED / 2 + m["lap_s"]
+        return (m["lap_s"] + self.slide * (m["lock_s"] + self.spin * m["spin_s"])
+                + self.slower * max(0.0, m["lap_s"] - base_lap))
+
+    def describe(self, base: str) -> str:
+        cap = f"; laps slower than {base} + {self.max_loss} s don't count" if self.max_loss is not None else ""
+        return (f"score = lap + {self.slide} x (lock-up + {self.spin} x wheelspin seconds)"
+                f" + {self.slower} x seconds slower than {base}{cap}")
 
 
 def _eval(args: tuple[dict[str, Any], np.ndarray]) -> dict[str, Any]:
@@ -114,18 +137,21 @@ def fmt(m: dict[str, Any]) -> str:
     return f"{lap}  lock-up {m['lock_s']:.2f} s  wheelspin {m['spin_s']:.2f} s"
 
 
-def smooth(track: str, baseline: str | None, generations: int, sigma: float, popsize: int | None, slide: float,
-           slower: float, workers: int | None, seed: int, fresh: bool) -> None:
+def smooth(track: str, baseline: str | None, name: str, generations: int, sigma: float, popsize: int, sc: Score,
+           restart_after: int, workers: int | None, seed: int, fresh: bool) -> None:
     src = baseline or str(winner_path("practice", track))
     base = json.loads(open(src).read())
-    out = winner_path("smooth", track)
-    state_file = track_dir(track) / "smooth-cma.pkl"
+    out = winner_path(name, track)
+    if os.path.abspath(out) == os.path.abspath(src):
+        raise SystemExit(f"{out} is the baseline; pick another --name")
+    state_file = track_dir(track) / f"{name}-es.pkl"
+    sigma0 = sigma
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
 
     base_m = measure(base, track=track)
     base_lap = base_m["lap_s"]
     print(f"Smooth inputs at {track}. Baseline {os.path.basename(src)}: {fmt(base_m)}", flush=True)
-    print(f"score = lap + {slide} x slide seconds + {slower} x seconds slower than {base_m['lap_time']}", flush=True)
+    print(sc.describe(base_m["lap_time"]), flush=True)
 
     x0 = flatten(base)
     rng = np.random.default_rng(seed)
@@ -135,7 +161,8 @@ def smooth(track: str, baseline: str | None, generations: int, sigma: float, pop
         print(f"resumed at generation {gen0}, sigma {sigma:.5f}, best {fmt(best_m)}", flush=True)
     else:
         best_x, best_m, gen0 = x0, base_m, 0
-    best_s = score(best_m, base_lap, slide, slower)
+    best_s = sc(best_m, base_lap)
+    misses = 0
 
     def save(gen: int) -> None:
         state_file.write_bytes(pickle.dumps({"best_x": best_x, "best_m": best_m, "sigma": sigma, "gen": gen, "rng": rng}))
@@ -146,20 +173,24 @@ def smooth(track: str, baseline: str | None, generations: int, sigma: float, pop
         for gen in range(gen0 + 1, gen0 + generations + 1):
             xs = [best_x + sigma * rng.standard_normal(len(best_x)) for _ in range(popsize)]
             ms = pool.map(_eval, [(base, x) for x in xs])
-            ss = [score(m, base_lap, slide, slower) for m in ms]
+            ss = [sc(m, base_lap) for m in ms]
             i = int(np.argmin(ss))
             mark = ""
             if ss[i] < best_s:
                 best_s, best_x, best_m = ss[i], xs[i], ms[i]
                 out.write_text(json.dumps(unflatten(base, best_x)) + "\n")
                 sigma = min(SIGMA_MAX, sigma * 1.2)
-                mark = "  << new best"
+                mark, misses = "  << new best", 0
             else:
                 sigma = max(SIGMA_MIN, sigma * 0.95)
+                misses += 1
+                if misses >= restart_after:
+                    sigma, misses, mark = sigma0, 0, "  << restart step"
+
             ranked = sum(m["ranked"] for m in ms)
             print(f"gen {gen:4d}  {(time.time() - t0) / 60:6.1f} min  sigma {sigma:.5f}  ranked {ranked:2d}/{len(ms)}"
                   f"  gen best {fmt(ms[i])}  |  best {fmt(best_m)}  score {best_s:.3f}{mark}", flush=True)
-            if gen % 10 == 0 or mark:
+            if gen % 10 == 0 or "best" in mark:
                 save(gen)
     save(gen)
     print(f"\nBaseline {fmt(base_m)}\nBest     {fmt(best_m)}\nUpload file: {out}", flush=True)
