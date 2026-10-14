@@ -36,7 +36,13 @@ from .general import EXCLUDE_REAL, HELDOUT_GEN, MASKED, braking_points, summaris
 from .line import racing_line
 from .paths import CHECKPOINTS, WINNERS
 from .racer import LineExpert
-from .smooth import flatten, unflatten
+from .smooth import flatten, unflatten as _unflatten
+
+
+def unflatten(base: dict, x: np.ndarray) -> dict:
+    """The network for parameters x, rounded to 6 decimals as general.py writes them (full precision would take
+    the file past the format's 500 KB limit)."""
+    return _unflatten(base, np.round(x, 6))
 
 
 def _prep(spec: str) -> tuple[str, list[int], np.ndarray]:
@@ -130,13 +136,15 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
                 mark = "  << new best"
             print(f"   held out ({label}): {line}  | completed {score:.1%}, laps finished {fin}/{total}{mark}", flush=True)
 
-        if gen0 == 0:
+        if gen0 == 0 and eval_every > 0:
             held_out(x, "start")
         for gen in range(gen0 + 1, gen0 + generations + 1):
             specs = ([f"gen:{int(s)}" for s in rng.integers(1, 800_000, gen_tracks)]
                      + [f"slow:{int(s)}" for s in rng.integers(1, 800_000, slow_tracks)]
                      + list(rng.choice(real_train, real_tracks, replace=False)))
+            tg = time.time()
             prep = pool.map(_prep, specs)
+            t_prep = time.time() - tg
             tasks = []
             eps_ = rng.standard_normal((pairs, len(x)))
             eps_[:, frozen] = 0.0
@@ -153,7 +161,9 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
                 lap_seed = int(rng.integers(3))
                 for c0 in range(0, len(cands), chunk):
                     tasks.append((spec, base, cands[c0:c0 + chunk], lap_seed, starts, stint, crash_s))
+            tg = time.time()
             res = pool.map(_episodes, tasks)
+            t_eps = time.time() - tg
             per_track = len(cands) // chunk + (1 if len(cands) % chunk else 0)
             f = np.zeros(len(cands))
             for ti in range(len(prep)):
@@ -174,8 +184,8 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
             step[frozen] = 0.0
             x = x + step
             print(f"gen {gen:4d}  {(time.time() - t0) / 60:6.1f} min  progress rate mean {raw.mean():6.2f} max {raw.max():6.2f} m/s "
-                  f"over {len(prep)} circuits", flush=True)
-            if gen % eval_every == 0:
+                  f"over {len(prep)} circuits  (prep {t_prep:.0f} s, driving {t_eps:.0f} s)", flush=True)
+            if eval_every > 0 and gen % eval_every == 0:
                 held_out(x, f"gen {gen}")
                 state_file.write_bytes(pickle.dumps({"x": x, "m": m, "v": v, "gen": gen, "best": best, "rng": rng}))
     print(f"\nBest held-out completion {best:.1%}: {out}", flush=True)
