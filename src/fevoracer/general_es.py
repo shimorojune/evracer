@@ -31,7 +31,7 @@ import numpy as np
 
 import fevo
 
-from . import general, realtracks
+from . import general, realtracks, robust_check
 from .general import EXCLUDE_REAL, HELDOUT_GEN, MASKED, braking_points, summarise
 from .line import racing_line
 from .paths import CHECKPOINTS, WINNERS
@@ -59,9 +59,11 @@ def _episodes(args: tuple) -> list[tuple[float, float]]:
     """Fitness of a chunk of candidates on one circuit (mean progress rate over its lap and stints) and the share of
     stints survived. With noise (act, obs, seed) the stints are driven with explore.py's mistakes: Gaussian noise on
     what the driver sees and a slowly drifting error on what it does (Ornstein-Uhlenbeck, about half a second), the
-    same noise for every candidate. The lap from the official start is driven clean."""
+    same noise for every candidate. The lap from the official start is driven clean unless lap_noise is set, then
+    with the same drifting action error."""
     spec, base, cands, seed, starts, stint, crash_s, noise = args
-    act_n, obs_n, noise_seed = noise
+    act_n, obs_n, noise_seed = noise[:3]
+    lap_noise = noise[3] if len(noise) > 3 else False
     sim = general._SIM
     if spec not in _TRACKS:
         _TRACKS.clear()
@@ -73,8 +75,18 @@ def _episodes(args: tuple) -> list[tuple[float, float]]:
     for x in cands:
         sim.load_program(fevo.from_json(json.dumps(unflatten(base, x))))
         rates = []
-        sim.reset(seed)
-        st = sim.run_agent_lap()
+        obs = sim.reset(seed)
+        if lap_noise and act_n:
+            rng = np.random.default_rng([noise_seed, 999])
+            ou, st = np.zeros(2), "running"
+            while st == "running":
+                steer, thr = sim.evaluate_program(obs)
+                ou += -ou / 30 + act_n * np.sqrt(2 / 30) * rng.standard_normal(2)
+                code, vals = sim.step_fast(float(np.clip(steer + ou[0], -1, 1)), float(np.clip(thr + ou[1], -1, 1)))
+                obs = list(vals[:len(obs)])
+                st = fevo.sim.STATUS[code]
+        else:
+            st = sim.run_agent_lap()
         dist = n if st == "finished" else max(0, sim.progress_index if sim.progress_index < n - 100 else 0)
         rates.append(dist / (sim.steps / hz + (0 if st == "finished" else crash_s)))
         survived = 0
@@ -110,7 +122,8 @@ def _episodes(args: tuple) -> list[tuple[float, float]]:
 def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: float, gen_tracks: int, slow_tracks: int,
         real_tracks: int, stints: int, stint: int, crash_s: float, eval_every: int, chunk: int, workers: int | None,
         seed: int, fresh: bool, mix_tracks: int = 0, act_noise: float = 0.0, obs_noise: float = 0.0,
-        noise_max: float = 0.1, noise_up: float = 1.2, survive: float = 0.8) -> None:
+        noise_max: float = 0.1, noise_up: float = 1.2, survive: float = 0.8, lap_noise: bool = False,
+        robust_select: float = 0.0) -> None:
     rng = np.random.default_rng(seed)
     base = json.load(open(init))
     setup_d = base.get("setup")
@@ -139,7 +152,8 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
           f"sigma {sigma}, lr {lr}; each generation {gen_tracks} generated + {slow_tracks} slow-corner + {mix_tracks} mixed + {real_tracks} real "
           f"training circuits, a lap and {stints} braking-zone stints of {stint} steps on each, crash +{crash_s} s; "
           f"held-out scoring every {eval_every} generations; stint noise act {act_noise} obs {obs_noise} (x{noise_up} when "
-          f"{survive:.0%} of stints survive, up to {noise_max}), the official-start lap and held-out scoring clean", flush=True)
+          f"{survive:.0%} of stints survive, up to {noise_max}), the official-start lap {'with the same action error' if lap_noise else 'clean'}; "
+          f"held-out pick by {'clean laps + laps under action error ' + str(robust_select) if robust_select else 'clean laps'}", flush=True)
     t0 = time.time()
     b1, b2, eps = 0.9, 0.999, 1e-8
     with mp.get_context("spawn").Pool(workers, initializer=general._init, initargs=(setup,)) as pool:
@@ -151,10 +165,16 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
             for e in ev:
                 e["expert"] = []
             line, score, fin, total = summarise(ev)
-            mark = ""
+            mark, key = "", fin
+            if robust_select:
+                # Robustness counts as much as clean driving: the same laps again with a drifting action error.
+                noisy = sum(pool.map(robust_check._laps, [(h, mlp, (robust_select,), 1) for h in held]), [])
+                nfin = sum(r[2] for r in noisy)
+                key = fin + nfin
+                line += f"  | with error {robust_select}: {nfin}/{len(noisy)} ({np.mean([r[3] for r in noisy]):.0%})"
             # Laps finished on the held-out tracks first, mean completion as the tiebreak.
-            if (fin, score) > best:
-                best = (fin, score)
+            if (key, score) > best:
+                best = (key, score)
                 out.write_text(json.dumps(mlp) + "\n")
                 mark = "  << new best"
             print(f"   held out ({label}): {line}  | completed {score:.1%}, laps finished {fin}/{total}{mark}", flush=True)
@@ -185,7 +205,7 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
                 lap_seed = int(rng.integers(3))
                 for c0 in range(0, len(cands), chunk):
                     tasks.append((spec, base, cands[c0:c0 + chunk], lap_seed, starts, stint, crash_s,
-                                  (noise["act"], noise["obs"], gen)))
+                                  (noise["act"], noise["obs"], gen, lap_noise)))
             tg = time.time()
             res = pool.map(_episodes, tasks)
             t_eps = time.time() - tg
@@ -243,6 +263,8 @@ def main() -> None:
     ap.add_argument("--noise-max", type=float, default=0.1)
     ap.add_argument("--noise-up", type=float, default=1.2, help="noise multiplier once enough stints survive")
     ap.add_argument("--survive", type=float, default=0.8, help="share of surviving stints that raises the noise")
+    ap.add_argument("--lap-noise", action="store_true", help="drive the official-start lap with the stint action error too")
+    ap.add_argument("--robust-select", type=float, default=0.0, help="pick the held-out best by clean laps + laps under this action error")
     ap.add_argument("--chunk", type=int, default=8, help="candidates per task")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
@@ -250,7 +272,7 @@ def main() -> None:
     a = ap.parse_args()
     run(a.init, a.name, a.generations, a.pairs, a.sigma, a.lr, a.gen_tracks, a.slow_tracks, a.real_tracks, a.stints,
         a.stint, a.crash_s, a.eval_every, a.chunk, a.workers, a.seed, a.fresh, a.mix_tracks,
-        a.act_noise, a.obs_noise, a.noise_max, a.noise_up, a.survive)
+        a.act_noise, a.obs_noise, a.noise_max, a.noise_up, a.survive, a.lap_noise, a.robust_select)
 
 
 if __name__ == "__main__":
