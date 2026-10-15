@@ -14,7 +14,7 @@ import fevo
 
 from .paths import WINNERS
 
-RULES = ("solo-1", "solo-2", "solo-3", "solo-4")
+RULES = ("solo-1", "solo-2", "solo-3", "solo-4", "solo-5")
 
 
 def main() -> None:

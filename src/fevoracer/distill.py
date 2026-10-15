@@ -93,6 +93,20 @@ def teach(args: tuple) -> tuple[np.ndarray, np.ndarray, int]:
     return np.array(xs, np.float32), np.array(ys, np.float32), len(xs)
 
 
+def _reach(args: tuple) -> float:
+    """How far round a circuit the start driver gets on official start 1 (1.0 = it finishes)."""
+    spec, init = args
+    setup_d = json.loads(open(init).read())["setup"]
+    sim = fevo.Simulator(general.RULES)
+    sim.set_setup([setup_d[k["id"]] for k in sim.rules.setup])
+    tr = general._track(spec)
+    sim.load_track(tr)
+    sim.load_program(fevo.from_json(open(init).read()))
+    sim.reset(1)
+    st = sim.run_agent_lap()
+    return 1.0 if st == "finished" else sim.progress_index / tr.points
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="distill", description=__doc__.split("\n")[0])
     ap.add_argument("--tracks", type=int, default=40)
@@ -116,8 +130,14 @@ def main() -> None:
     if not a.skip_practice:
         print(f"Practising on {len(specs)} training circuits, {a.budget} laps each", flush=True)
         with mp.get_context("spawn").Pool(workers) as pool:
-            reps = pool.map(practice2.practise, [(s, 4, 16, 3e-3, 1e-3, 4, 600, 5.0, a.budget, 5, 300, a.seed + i, 2, a.teachers, (16, 6e-3))
-                                                 for i, s in enumerate(specs)])
+            # Hardest first: the circuits the start driver gets least far round take longest to practise, so they
+            # start first and the pool does not finish on a few stragglers with most cores idle.
+            reach = pool.map(_reach, [(s, a.init) for s in specs])
+            order = sorted(range(len(specs)), key=lambda i: reach[i])
+            print("hardest first: " + ", ".join(f"{specs[i]} {reach[i]:.0%}" for i in order[:5]) + " ...", flush=True)
+            jobs = [(specs[i], 4, 16, 3e-3, 1e-3, 4, 600, 5.0, a.budget, 5, 300, a.seed + i, 2, a.teachers, (16, 6e-3)) for i in order]
+            done = pool.imap_unordered(practice2.practise, jobs, chunksize=1)
+            reps = sorted(done, key=lambda r: specs.index(r["track"]))
         (WINNERS / a.teachers / "report.json").write_text(json.dumps(reps, indent=1) + "\n")
         print(f"practice done ({(time.time() - t0) / 60:.0f} min)", flush=True)
     reps = json.loads((WINNERS / a.teachers / "report.json").read_text())

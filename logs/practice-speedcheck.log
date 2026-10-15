@@ -1,0 +1,3 @@
+circuit      start driver                                      0                      20                     100                     500                    2000  expert
+gen:900006   general-solo4-robust2-laps                0/3 (15%)               0/3 (15%)      3/3 1:04.92 +15.2%      3/3 1:03.52 +12.7%       3/3 1:00.67 +7.6%  0:56.37   (pace from 56.3 laps; imitation kept 4/5; 29 steps, 5.6 min; all three starts from 124.4 laps)
+caffeinate -s uv run python -m fevoracer.practice2 --tracks gen:900006  2000   333.52s user 2.01s system 98% cpu 5:39.54 total
