@@ -18,7 +18,13 @@ inside it) the line hugged the apex at a 7.2 m radius, tighter than the car's
 8.5 m turning circle at full lock. So wherever the line's radius falls below
 `min_radius` (12 m: that circle plus room for the tyres' slip angles), the
 inside limit there moves out by half a metre and the line is solved again,
-until no point is too tight.
+until no point is too tight. Only the stretches within 150 m of a point that
+was too tight change; the rest of the line is the original one.
+
+The limit is off by default (min_radius 0): with it the expert's own laps got no
+better (Austin: it laps on the old line and crashes on the limited one; the
+pure-pursuit expert already cuts inside a too-tight apex), so experts and
+training keep the original line. expert_check compares the two.
 """
 
 from __future__ import annotations
@@ -43,14 +49,16 @@ def _curv(p: np.ndarray, h: int = 3) -> np.ndarray:
 
 
 def racing_line(track: fevo.Track, margin: float, step: int = 4, iterations: int = 20000,
-                min_radius: float = 12.0, rounds: int = 40) -> np.ndarray:
+                min_radius: float = 0.0, rounds: int = 40) -> np.ndarray:
     """Offsets from the centre line (metres, left positive) at every centre-line point; no radius under min_radius
     where the track leaves room for one (0 turns the limit off, the original line)."""
     off = _solve(track, margin, step, iterations)
     if not min_radius:
         return off
+    base = off.copy()
     c, nl = normals(track)
     n = len(c)
+    touched = np.zeros(n, bool)
     wl, wr = np.array(track.raw["widthLeft"]), np.array(track.raw["widthRight"])
     lo, hi = -(wr - margin), wl - margin
     for _ in range(rounds):
@@ -60,12 +68,17 @@ def racing_line(track: fevo.Track, margin: float, step: int = 4, iterations: int
             break
         for i in tight:
             near = (i + np.arange(-6, 7)) % n
+            touched[(i + np.arange(-150, 151)) % n] = True
             if k[i] > 0:  # turning left: the inside is the left edge, keep the line further right
                 hi[near] = np.maximum(lo[near], np.minimum(hi[near], off[near] - 0.5))
             else:
                 lo[near] = np.minimum(hi[near], np.maximum(lo[near], off[near] + 0.5))
         off = _solve(track, margin, step, iterations // 4, bounds=(lo, hi), start=off)
-    return off
+    # Keep the change local: the re-solves also carry on converging everywhere else, which would move the whole
+    # line. Use them only within 150 m of a point that was too tight, blended in over 50 m either side.
+    w = np.convolve(np.concatenate([touched[-50:], touched, touched[:50]]).astype(float), np.ones(101) / 101, "same")[50:-50]
+    w = np.clip(w * 2, 0, 1)
+    return base * (1 - w) + off * w
 
 
 def _solve(track: fevo.Track, margin: float, step: int, iterations: int,
