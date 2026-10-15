@@ -126,13 +126,14 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
     real_train = [r for r in realtracks.names("train") if r not in EXCLUDE_REAL]
     held = [f"gen:{s}" for s in HELDOUT_GEN] + realtracks.names("test") + ["spielberg"]
     out, state_file = WINNERS / f"{name}.json", CHECKPOINTS / f"{name}-es.pkl"
-    m, v, gen0, best = np.zeros_like(x), np.zeros_like(x), 0, -1.0
+    m, v, gen0, best = np.zeros_like(x), np.zeros_like(x), 0, (-1, -1.0)
     noise = {"act": act_noise, "obs": obs_noise}
     if state_file.is_file() and not fresh:
         st = pickle.loads(state_file.read_bytes())
         x, m, v, gen0, best, rng = st["x"], st["m"], st["v"], st["gen"], st["best"], st["rng"]
         noise = st.get("noise", noise)
-        print(f"resumed at generation {gen0}, best held-out completion {best:.1%}", flush=True)
+        best = st.get("best_laps", (-1, best))
+        print(f"resumed at generation {gen0}, best held-out {best[0]} laps, completion {best[1]:.1%}", flush=True)
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
     print(f"General ES on {general.RULES}: {len(x)} numbers ({frozen.sum()} frozen), {2 * pairs} candidates a generation, "
           f"sigma {sigma}, lr {lr}; each generation {gen_tracks} generated + {slow_tracks} slow-corner + {mix_tracks} mixed + {real_tracks} real "
@@ -151,8 +152,9 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
                 e["expert"] = []
             line, score, fin, total = summarise(ev)
             mark = ""
-            if score > best:
-                best = score
+            # Laps finished on the held-out tracks first, mean completion as the tiebreak.
+            if (fin, score) > best:
+                best = (fin, score)
                 out.write_text(json.dumps(mlp) + "\n")
                 mark = "  << new best"
             print(f"   held out ({label}): {line}  | completed {score:.1%}, laps finished {fin}/{total}{mark}", flush=True)
@@ -216,8 +218,8 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
                 noise = {k: min(noise_max, v_ * noise_up) for k, v_ in noise.items()}
             if eval_every > 0 and gen % eval_every == 0:
                 held_out(x, f"gen {gen}")
-                state_file.write_bytes(pickle.dumps({"x": x, "m": m, "v": v, "gen": gen, "best": best, "rng": rng, "noise": noise}))
-    print(f"\nBest held-out completion {best:.1%}: {out}", flush=True)
+                state_file.write_bytes(pickle.dumps({"x": x, "m": m, "v": v, "gen": gen, "best": best[1], "best_laps": best, "rng": rng, "noise": noise}))
+    print(f"\nBest held-out: {best[0]} laps, completion {best[1]:.1%}: {out}", flush=True)
 
 
 def main() -> None:

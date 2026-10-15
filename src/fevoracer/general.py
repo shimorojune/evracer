@@ -283,7 +283,7 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
         with np.load(data) as d:
             keep = slice(-data_last, None) if data_last else slice(None)
             X, Y = list(np.array_split(d["X"][keep], 20)), list(np.array_split(d["Y"][keep], 20))
-    best, out = -1.0, WINNERS / f"{name}.json"
+    best, out = (-1, -1.0), WINNERS / f"{name}.json"
     t0 = time.time()
     print(f"General driver on {RULES}: student {[len(rules.observation), *hidden, 2]} with inputs {MASKED} masked, braking/corner-entry "
           f"states drawn x{brake_weight}, {brake_starts:.0%} of practice stints start before a braking zone, {expert_share:.0%} of runs all expert, {seed_rounds} expert-only seed rounds, data kept across rounds; per round {gen_per_round} new "
@@ -299,8 +299,9 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
             ev0 = pool.map(_official, [(h, student.to_mlp(setup_d), False) for h in held])
             for e in ev0:
                 e["expert"] = expert_laps[e["track"]]
-            line, best, fin, total = summarise(ev0)
-            print(f"warm start from {init}: held out {line} | completed {best:.1%}, laps finished {fin}/{total}", flush=True)
+            line, score0, fin, total = summarise(ev0)
+            best = (fin, score0)
+            print(f"warm start from {init}: held out {line} | completed {score0:.1%}, laps finished {fin}/{total}", flush=True)
         avg = copy.deepcopy(student)
         for r in range(start_round, start_round + rounds + 1):
             # The first seed_rounds rounds of a continued run collect expert-driven laps only (the data a fresh run
@@ -339,15 +340,16 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
                     e["expert"] = expert_laps[e["track"]]
                 line, score, fin, total = summarise(ev)
                 mark = ""
-                if score > best:
-                    best = score
+                # Laps finished on the held-out tracks first, mean completion as the tiebreak.
+                if (fin, score) > best:
+                    best = (fin, score)
                     out.write_text(json.dumps(mlp) + "\n")
                     mark = "  << new best"
                 print(f"   held out ({label}): {line}  | completed {score:.1%}, laps finished {fin}/{total}{mark}", flush=True)
             torch.save(student.state_dict(), CHECKPOINTS / f"{name}-student.pt")
             torch.save(avg.state_dict(), CHECKPOINTS / f"{name}-avg.pt")
             np.savez(CHECKPOINTS / f"{name}-data.npz", X=Xa, Y=Ya)
-    print(f"\nBest held-out completion {best:.1%}: {out}", flush=True)
+    print(f"\nBest held-out: {best[0]} laps, completion {best[1]:.1%}: {out}", flush=True)
 
 
 def main() -> None:
