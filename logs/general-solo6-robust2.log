@@ -1,0 +1,430 @@
+General ES on solo-6: 32642 numbers (384 frozen), 48 candidates a generation, sigma 0.003, lr 0.0003; each generation 3 generated + 3 slow-corner + 0 mixed + 3 real training circuits, a lap and 4 braking-zone stints of 400 steps on each, crash +5.0 s; held-out scoring every 5 generations; stint noise act 0.06 obs 0.0 (x1.15 when 60% of stints survive, up to 0.1), the official-start lap with the same action error; held-out pick by clean laps + laps under action error 0.06
+   held out (start): g900000 1:13.58  g900001 1:02.92  g900002 1:27.20  g900004 1:23.25  g900005 0:57.40  g900006 3/5 (66%)  g900007 1:24.45  g900008 1:03.97  austin 1:57.02  montreal 0/5 (90%)  monza 0/5 (16%)  spa 0/5 (16%)  spielberg 1:15.87  | with error 0.06: 12/65 (46%)  | completed 83.7%, laps finished 48/65  << new best
+gen    1     1.2 min  progress rate mean  43.90 max  46.08 m/s over 9 circuits, stints survived  74% at noise act 0.060 obs 0.000  (prep 3 s, driving 33 s)
+gen    2     1.7 min  progress rate mean  35.45 max  38.83 m/s over 9 circuits, stints survived  55% at noise act 0.069 obs 0.000  (prep 2 s, driving 23 s)
+gen    3     2.1 min  progress rate mean  40.34 max  43.93 m/s over 9 circuits, stints survived  63% at noise act 0.069 obs 0.000  (prep 2 s, driving 26 s)
+gen    4     2.6 min  progress rate mean  37.00 max  39.98 m/s over 9 circuits, stints survived  62% at noise act 0.079 obs 0.000  (prep 2 s, driving 27 s)
+gen    5     3.0 min  progress rate mean  35.79 max  38.48 m/s over 9 circuits, stints survived  61% at noise act 0.091 obs 0.000  (prep 2 s, driving 22 s)
+   held out (gen 5): g900000 1:14.18  g900001 1:04.00  g900002 1:27.83  g900004 1:24.48  g900005 0:58.27  g900006 3/5 (72%)  g900007 1:25.72  g900008 1:04.28  austin 1:59.32  montreal 0/5 (90%)  monza 0/5 (16%)  spa 0/5 (16%)  spielberg 1:16.77  | with error 0.06: 25/65 (56%)  | completed 84.1%, laps finished 48/65  << new best
+gen    6     4.1 min  progress rate mean  34.95 max  38.18 m/s over 9 circuits, stints survived  59% at noise act 0.100 obs 0.000  (prep 3 s, driving 19 s)
+gen    7     4.5 min  progress rate mean  39.98 max  43.18 m/s over 9 circuits, stints survived  51% at noise act 0.100 obs 0.000  (prep 3 s, driving 21 s)
+gen    8     4.9 min  progress rate mean  33.53 max  36.60 m/s over 9 circuits, stints survived  49% at noise act 0.100 obs 0.000  (prep 3 s, driving 21 s)
+gen    9     5.3 min  progress rate mean  33.59 max  37.01 m/s over 9 circuits, stints survived  41% at noise act 0.100 obs 0.000  (prep 3 s, driving 24 s)
+gen   10     5.7 min  progress rate mean  33.90 max  39.52 m/s over 9 circuits, stints survived  45% at noise act 0.100 obs 0.000  (prep 3 s, driving 20 s)
+   held out (gen 10): g900000 1:14.95  g900001 1:04.83  g900002 1:28.70  g900004 1:25.45  g900005 0:59.08  g900006 1/5 (31%)  g900007 1:26.75  g900008 1:05.15  austin 2:01.65  montreal 4/5 (98%)  monza 0/5 (16%)  spa 0/5 (16%)  spielberg 1:17.63  | with error 0.06: 15/65 (44%)  | completed 81.7%, laps finished 50/65
+gen   11     6.6 min  progress rate mean  34.85 max  38.09 m/s over 9 circuits, stints survived  65% at noise act 0.100 obs 0.000  (prep 2 s, driving 21 s)
+gen   12     7.0 min  progress rate mean  38.98 max  43.56 m/s over 9 circuits, stints survived  59% at noise act 0.100 obs 0.000  (prep 3 s, driving 21 s)
+gen   13     7.4 min  progress rate mean  32.65 max  35.51 m/s over 9 circuits, stints survived  50% at noise act 0.100 obs 0.000  (prep 3 s, driving 19 s)
+gen   14     7.8 min  progress rate mean  40.56 max  42.38 m/s over 9 circuits, stints survived  66% at noise act 0.100 obs 0.000  (prep 3 s, driving 25 s)
+gen   15     8.3 min  progress rate mean  36.42 max  38.62 m/s over 9 circuits, stints survived  68% at noise act 0.100 obs 0.000  (prep 3 s, driving 24 s)
+   held out (gen 15): g900000 1:14.97  g900001 1:04.63  g900002 1:28.70  g900004 1:25.27  g900005 0:59.02  g900006 1/5 (32%)  g900007 1:26.30  g900008 1:05.08  austin 2:00.67  montreal 1:29.30  monza 0/5 (16%)  spa 0/5 (16%)  spielberg 4/5 (87%)  | with error 0.06: 20/65 (51%)  | completed 80.8%, laps finished 50/65
+gen   16     9.3 min  progress rate mean  40.45 max  43.39 m/s over 9 circuits, stints survived  76% at noise act 0.100 obs 0.000  (prep 3 s, driving 23 s)
+gen   17     9.7 min  progress rate mean  34.52 max  37.19 m/s over 9 circuits, stints survived  42% at noise act 0.100 obs 0.000  (prep 3 s, driving 22 s)
+gen   18    10.1 min  progress rate mean  33.29 max  35.80 m/s over 9 circuits, stints survived  60% at noise act 0.100 obs 0.000  (prep 3 s, driving 22 s)
+gen   19    10.5 min  progress rate mean  36.76 max  39.83 m/s over 9 circuits, stints survived  58% at noise act 0.100 obs 0.000  (prep 3 s, driving 23 s)
+gen   20    11.0 min  progress rate mean  37.50 max  40.49 m/s over 9 circuits, stints survived  57% at noise act 0.100 obs 0.000  (prep 2 s, driving 25 s)
+   held out (gen 20): g900000 1:14.95  g900001 1:04.80  g900002 1:28.78  g900004 1:25.38  g900005 0:58.97  g900006 0/5 (15%)  g900007 1:26.47  g900008 1:04.73  austin 2:00.72  montreal 1:29.73  monza 0/5 (16%)  spa 0/5 (16%)  spielberg 0/5 (33%)  | with error 0.06: 22/65 (53%)  | completed 75.4%, laps finished 45/65
+gen   21    11.9 min  progress rate mean  32.29 max  33.95 m/s over 9 circuits, stints survived  51% at noise act 0.100 obs 0.000  (prep 2 s, driving 19 s)
+gen   22    12.3 min  progress rate mean  33.31 max  35.67 m/s over 9 circuits, stints survived  46% at noise act 0.100 obs 0.000  (prep 3 s, driving 21 s)
+gen   23    12.7 min  progress rate mean  36.64 max  39.19 m/s over 9 circuits, stints survived  68% at noise act 0.100 obs 0.000  (prep 3 s, driving 19 s)
+gen   24    13.1 min  progress rate mean  36.82 max  39.33 m/s over 9 circuits, stints survived  53% at noise act 0.100 obs 0.000  (prep 3 s, driving 23 s)
+gen   25    13.5 min  progress rate mean  37.94 max  40.55 m/s over 9 circuits, stints survived  65% at noise act 0.100 obs 0.000  (prep 3 s, driving 20 s)
+   held out (gen 25): g900000 1:15.45  g900001 1:04.77  g900002 1:28.87  g900004 1:25.30  g900005 0:58.88  g900006 0/5 (23%)  g900007 1:26.30  g900008 1:04.75  austin 2:00.83  montreal 0/5 (9%)  monza 0/5 (16%)  spa 0/5 (16%)  spielberg 0/5 (33%)  | with error 0.06: 31/65 (64%)  | completed 69.0%, laps finished 40/65
+gen   26    14.4 min  progress rate mean  35.97 max  38.85 m/s over 9 circuits, stints survived  59% at noise act 0.100 obs 0.000  (prep 2 s, driving 23 s)
+gen   27    14.9 min  progress rate mean  34.42 max  39.09 m/s over 9 circuits, stints survived  60% at noise act 0.100 obs 0.000  (prep 3 s, driving 23 s)
+gen   28    15.2 min  progress rate mean  33.38 max  35.86 m/s over 9 circuits, stints survived  48% at noise act 0.100 obs 0.000  (prep 3 s, driving 21 s)
+gen   29    15.7 min  progress rate mean  35.43 max  38.13 m/s over 9 circuits, stints survived  50% at noise act 0.100 obs 0.000  (prep 2 s, driving 24 s)
+gen   30    16.1 min  progress rate mean  34.76 max  38.40 m/s over 9 circuits, stints survived  47% at noise act 0.100 obs 0.000  (prep 2 s, driving 25 s)
+   held out (gen 30): g900000 1:14.90  g900001 1:04.72  g900002 1:28.68  g900004 1:25.00  g900005 0:58.65  g900006 2/5 (57%)  g900007 1:25.63  g900008 1:04.72  austin 1:59.95  montreal 4/5 (98%)  monza 0/5 (16%)  spa 0/5 (16%)  spielberg 1/5 (46%)  | with error 0.06: 21/65 (54%)  | completed 79.5%, laps finished 47/65
+gen   31    17.0 min  progress rate mean  38.83 max  40.95 m/s over 9 circuits, stints survived  72% at noise act 0.100 obs 0.000  (prep 3 s, driving 26 s)
+gen   32    17.5 min  progress rate mean  32.72 max  35.41 m/s over 9 circuits, stints survived  49% at noise act 0.100 obs 0.000  (prep 2 s, driving 25 s)
+gen   33    18.0 min  progress rate mean  39.32 max  42.47 m/s over 9 circuits, stints survived  55% at noise act 0.100 obs 0.000  (prep 3 s, driving 25 s)
+gen   34    18.4 min  progress rate mean  37.54 max  40.81 m/s over 9 circuits, stints survived  65% at noise act 0.100 obs 0.000  (prep 2 s, driving 22 s)
+gen   35    18.7 min  progress rate mean  34.65 max  37.48 m/s over 9 circuits, stints survived  41% at noise act 0.100 obs 0.000  (prep 3 s, driving 21 s)
+   held out (gen 35): g900000 1:15.17  g900001 1:05.07  g900002 1:28.95  g900004 1:25.37  g900005 0:58.92  g900006 3/5 (72%)  g900007 3/5 (63%)  g900008 1:04.98  austin 2:00.48  montreal 1/5 (92%)  monza 0/5 (16%)  spa 0/5 (18%)  spielberg 0/5 (33%)  | with error 0.06: 22/65 (55%)  | completed 76.5%, laps finished 42/65
+gen   36    19.7 min  progress rate mean  36.91 max  40.17 m/s over 9 circuits, stints survived  64% at noise act 0.100 obs 0.000  (prep 2 s, driving 24 s)
+gen   37    20.1 min  progress rate mean  36.66 max  38.89 m/s over 9 circuits, stints survived  72% at noise act 0.100 obs 0.000  (prep 3 s, driving 23 s)
+gen   38    20.5 min  progress rate mean  35.04 max  39.35 m/s over 9 circuits, stints survived  62% at noise act 0.100 obs 0.000  (prep 2 s, driving 24 s)
+gen   39    21.0 min  progress rate mean  38.65 max  41.14 m/s over 9 circuits, stints survived  59% at noise act 0.100 obs 0.000  (prep 3 s, driving 28 s)
+gen   40    21.5 min  progress rate mean  32.38 max  35.33 m/s over 9 circuits, stints survived  54% at noise act 0.100 obs 0.000  (prep 3 s, driving 24 s)
+   held out (gen 40): g900000 1:15.15  g900001 1:05.10  g900002 1:29.08  g900004 1:25.47  g900005 0:58.95  g900006 0/5 (29%)  g900007 3/5 (63%)  g900008 1:05.02  austin 2:00.55  montreal 0/5 (90%)  monza 0/5 (16%)  spa 0/5 (18%)  spielberg 0/5 (33%)  | with error 0.06: 26/65 (61%)  | completed 73.1%, laps finished 38/65
+Process SpawnPoolWorker-7:
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+    ~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+Process SpawnPoolWorker-9:
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+    ~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+Process SpawnPoolWorker-5:
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+    ~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+Process SpawnPoolWorker-6:
+Traceback (most recent call last):
+Process SpawnPoolWorker-1:
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+    ~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+    ~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+Process SpawnPoolWorker-3:
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+    ~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+Process SpawnPoolWorker-8:
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+    ~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+Process SpawnPoolWorker-4:
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+    ~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+Process SpawnPoolWorker-2:
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+    ~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/queues.py", line 397, in put
+    self._writer.send_bytes(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+    ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+/Users/rraj/.local/share/uv/python/cpython-3.13-macos-aarch64-none/lib/python3.13/multiprocessing/resource_tracker.py:301: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown: {'/mp-isxc2emg', '/mp-9y5nqboa', '/mp-1rdeg8oo', '/mp-_zrzg50w', '/mp-8684cd42', '/mp-8v_kkg85'}
+  warnings.warn(
