@@ -1,0 +1,910 @@
+[
+ {
+  "track": "spielberg",
+  "start": "general-solo6",
+  "expert": 4270,
+  "points": [
+   {
+    "budget": 0,
+    "used": 0.0,
+    "laps": [
+     [
+      "finished",
+      4383,
+      1.0
+     ],
+     [
+      "finished",
+      4374,
+      1.0
+     ],
+     [
+      "finished",
+      4386,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 20,
+    "used": 45.2,
+    "laps": [
+     [
+      "finished",
+      4383,
+      1.0
+     ],
+     [
+      "finished",
+      4374,
+      1.0
+     ],
+     [
+      "finished",
+      4386,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 100,
+    "used": 152.2,
+    "laps": [
+     [
+      "finished",
+      4383,
+      1.0
+     ],
+     [
+      "finished",
+      4374,
+      1.0
+     ],
+     [
+      "finished",
+      4386,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 500,
+    "used": 574.4,
+    "laps": [
+     [
+      "finished",
+      4383,
+      1.0
+     ],
+     [
+      "finished",
+      4374,
+      1.0
+     ],
+     [
+      "finished",
+      4386,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 2000,
+    "used": 2073.5,
+    "laps": [
+     [
+      "finished",
+      4327,
+      1.0
+     ],
+     [
+      "finished",
+      4339,
+      1.0
+     ],
+     [
+      "finished",
+      4323,
+      1.0
+     ]
+    ]
+   }
+  ],
+  "pace_from": 0.0,
+  "imitation": [
+   4,
+   5
+  ],
+  "three": 45.2,
+  "steps": 29,
+  "minutes": 8.8
+ },
+ {
+  "track": "montreal",
+  "start": "general-solo6-es",
+  "expert": 4723,
+  "points": [
+   {
+    "budget": 0,
+    "used": 0.0,
+    "laps": [
+     [
+      "crashed",
+      767,
+      0.08031206975676916
+     ],
+     [
+      "finished",
+      5497,
+      1.0
+     ],
+     [
+      "finished",
+      5505,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 20,
+    "used": 44.4,
+    "laps": [
+     [
+      "finished",
+      5392,
+      1.0
+     ],
+     [
+      "finished",
+      5408,
+      1.0
+     ],
+     [
+      "finished",
+      5408,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 100,
+    "used": 148.0,
+    "laps": [
+     [
+      "finished",
+      5242,
+      1.0
+     ],
+     [
+      "finished",
+      5246,
+      1.0
+     ],
+     [
+      "finished",
+      5243,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 500,
+    "used": 547.2,
+    "laps": [
+     [
+      "finished",
+      5155,
+      1.0
+     ],
+     [
+      "finished",
+      5182,
+      1.0
+     ],
+     [
+      "finished",
+      5161,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 2000,
+    "used": 2030.4,
+    "laps": [
+     [
+      "finished",
+      5002,
+      1.0
+     ],
+     [
+      "finished",
+      4977,
+      1.0
+     ],
+     [
+      "finished",
+      5000,
+      1.0
+     ]
+    ]
+   }
+  ],
+  "pace_from": 0.0,
+  "imitation": [
+   7,
+   7
+  ],
+  "three": 44.4,
+  "steps": 36,
+  "minutes": 10.1
+ },
+ {
+  "track": "monza",
+  "start": "general-solo6-es",
+  "expert": 5226,
+  "points": [
+   {
+    "budget": 0,
+    "used": 0.0,
+    "laps": [
+     [
+      "crashed",
+      1070,
+      0.16318425142462442
+     ],
+     [
+      "crashed",
+      1071,
+      0.16301156967708513
+     ],
+     [
+      "crashed",
+      1059,
+      0.16301156967708513
+     ]
+    ]
+   },
+   {
+    "budget": 20,
+    "used": 22.0,
+    "laps": [
+     [
+      "crashed",
+      1051,
+      0.1633569331721637
+     ],
+     [
+      "crashed",
+      1053,
+      0.1633569331721637
+     ],
+     [
+      "crashed",
+      1047,
+      0.163529614919703
+     ]
+    ]
+   },
+   {
+    "budget": 100,
+    "used": 104.9,
+    "laps": [
+     [
+      "crashed",
+      2320,
+      0.3686755309963737
+     ],
+     [
+      "finished",
+      5974,
+      1.0
+     ],
+     [
+      "crashed",
+      2321,
+      0.36902089449145226
+     ]
+    ]
+   },
+   {
+    "budget": 500,
+    "used": 510.3,
+    "laps": [
+     [
+      "finished",
+      5749,
+      1.0
+     ],
+     [
+      "finished",
+      5767,
+      1.0
+     ],
+     [
+      "finished",
+      5719,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 2000,
+    "used": 2059.6,
+    "laps": [
+     [
+      "finished",
+      5598,
+      1.0
+     ],
+     [
+      "finished",
+      5582,
+      1.0
+     ],
+     [
+      "finished",
+      5567,
+      1.0
+     ]
+    ]
+   }
+  ],
+  "pace_from": 154.3,
+  "imitation": [
+   3,
+   6
+  ],
+  "failures": [
+   {
+    "at_laps": 0.2,
+    "point": 944
+   },
+   {
+    "at_laps": 9.4,
+    "point": 944
+   },
+   {
+    "at_laps": 22.1,
+    "point": 946
+   },
+   {
+    "at_laps": 36.3,
+    "point": 950
+   },
+   {
+    "at_laps": 50.7,
+    "point": 1043
+   },
+   {
+    "at_laps": 62.7,
+    "point": 1044
+   },
+   {
+    "at_laps": 76.1,
+    "point": 1045
+   },
+   {
+    "at_laps": 90.1,
+    "point": 2135
+   },
+   {
+    "at_laps": 105.3,
+    "point": 2135
+   }
+  ],
+  "three": 204.5,
+  "steps": 43,
+  "minutes": 11.3
+ },
+ {
+  "track": "austin",
+  "start": "general-solo6-es",
+  "expert": 6247,
+  "points": [
+   {
+    "budget": 0,
+    "used": 0.0,
+    "laps": [
+     [
+      "crashed",
+      3132,
+      0.4155019059720457
+     ],
+     [
+      "finished",
+      7477,
+      1.0
+     ],
+     [
+      "crashed",
+      3137,
+      0.4149573425304048
+     ]
+    ]
+   },
+   {
+    "budget": 20,
+    "used": 24.6,
+    "laps": [
+     [
+      "crashed",
+      3132,
+      0.4155019059720457
+     ],
+     [
+      "finished",
+      7477,
+      1.0
+     ],
+     [
+      "crashed",
+      3137,
+      0.4149573425304048
+     ]
+    ]
+   },
+   {
+    "budget": 100,
+    "used": 106.2,
+    "laps": [
+     [
+      "crashed",
+      3132,
+      0.4155019059720457
+     ],
+     [
+      "finished",
+      7477,
+      1.0
+     ],
+     [
+      "crashed",
+      3137,
+      0.4149573425304048
+     ]
+    ]
+   },
+   {
+    "budget": 500,
+    "used": 509.2,
+    "laps": [
+     [
+      "finished",
+      6800,
+      1.0
+     ],
+     [
+      "finished",
+      6826,
+      1.0
+     ],
+     [
+      "finished",
+      6808,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 2000,
+    "used": 2034.5,
+    "laps": [
+     [
+      "finished",
+      6623,
+      1.0
+     ],
+     [
+      "finished",
+      6616,
+      1.0
+     ],
+     [
+      "finished",
+      6599,
+      1.0
+     ]
+    ]
+   }
+  ],
+  "pace_from": 162.0,
+  "imitation": [
+   2,
+   4
+  ],
+  "failures": [
+   {
+    "at_laps": 0.4,
+    "point": 2286
+   }
+  ],
+  "three": 247.3,
+  "steps": 29,
+  "minutes": 11.8
+ },
+ {
+  "track": "spa",
+  "start": "general-solo6-es",
+  "expert": 6411,
+  "points": [
+   {
+    "budget": 0,
+    "used": 0.0,
+    "laps": [
+     [
+      "finished",
+      7323,
+      1.0
+     ],
+     [
+      "crashed",
+      1489,
+      0.17940294243679475
+     ],
+     [
+      "crashed",
+      1539,
+      0.1854020854163691
+     ]
+    ]
+   },
+   {
+    "budget": 20,
+    "used": 24.2,
+    "laps": [
+     [
+      "finished",
+      7323,
+      1.0
+     ],
+     [
+      "crashed",
+      1489,
+      0.17940294243679475
+     ],
+     [
+      "crashed",
+      1539,
+      0.1854020854163691
+     ]
+    ]
+   },
+   {
+    "budget": 100,
+    "used": 102.8,
+    "laps": [
+     [
+      "finished",
+      7323,
+      1.0
+     ],
+     [
+      "crashed",
+      1489,
+      0.17940294243679475
+     ],
+     [
+      "crashed",
+      1539,
+      0.1854020854163691
+     ]
+    ]
+   },
+   {
+    "budget": 500,
+    "used": 525.7,
+    "laps": [
+     [
+      "finished",
+      7323,
+      1.0
+     ],
+     [
+      "crashed",
+      1489,
+      0.17940294243679475
+     ],
+     [
+      "crashed",
+      1539,
+      0.1854020854163691
+     ]
+    ]
+   },
+   {
+    "budget": 2000,
+    "used": 2046.4,
+    "laps": [
+     [
+      "finished",
+      6963,
+      1.0
+     ],
+     [
+      "finished",
+      6960,
+      1.0
+     ],
+     [
+      "finished",
+      6958,
+      1.0
+     ]
+    ]
+   }
+  ],
+  "pace_from": 760.5,
+  "imitation": [
+   3,
+   4
+  ],
+  "failures": [
+   {
+    "at_laps": 0.2,
+    "point": 1256
+   },
+   {
+    "at_laps": 680.7,
+    "point": 3906
+   }
+  ],
+  "three": 842.5,
+  "steps": 55,
+  "minutes": 13.0
+ },
+ {
+  "track": "gen:900006",
+  "start": "general-solo6",
+  "expert": 3382,
+  "points": [
+   {
+    "budget": 0,
+    "used": 0.0,
+    "laps": [
+     [
+      "crashed",
+      648,
+      0.15204344098313805
+     ],
+     [
+      "crashed",
+      647,
+      0.15204344098313805
+     ],
+     [
+      "crashed",
+      646,
+      0.15204344098313805
+     ]
+    ]
+   },
+   {
+    "budget": 20,
+    "used": 32.1,
+    "laps": [
+     [
+      "crashed",
+      652,
+      0.15232923692483566
+     ],
+     [
+      "crashed",
+      651,
+      0.15232923692483566
+     ],
+     [
+      "crashed",
+      648,
+      0.15232923692483566
+     ]
+    ]
+   },
+   {
+    "budget": 100,
+    "used": 141.0,
+    "laps": [
+     [
+      "finished",
+      3609,
+      1.0
+     ],
+     [
+      "finished",
+      3614,
+      1.0
+     ],
+     [
+      "finished",
+      3609,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 500,
+    "used": 542.6,
+    "laps": [
+     [
+      "finished",
+      3493,
+      1.0
+     ],
+     [
+      "finished",
+      3500,
+      1.0
+     ],
+     [
+      "finished",
+      3491,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 2000,
+    "used": 2036.4,
+    "laps": [
+     [
+      "finished",
+      3381,
+      1.0
+     ],
+     [
+      "finished",
+      3384,
+      1.0
+     ],
+     [
+      "finished",
+      3378,
+      1.0
+     ]
+    ]
+   }
+  ],
+  "pace_from": 97.0,
+  "imitation": [
+   6,
+   6
+  ],
+  "failures": [
+   {
+    "at_laps": 0.2,
+    "point": 532
+   },
+   {
+    "at_laps": 16.4,
+    "point": 533
+   },
+   {
+    "at_laps": 76.7,
+    "point": 540
+   }
+  ],
+  "three": 141.0,
+  "steps": 36,
+  "minutes": 7.4
+ },
+ {
+  "track": "gen:900001",
+  "start": "general-solo6-es",
+  "expert": 3578,
+  "points": [
+   {
+    "budget": 0,
+    "used": 0.0,
+    "laps": [
+     [
+      "finished",
+      4013,
+      1.0
+     ],
+     [
+      "finished",
+      4089,
+      1.0
+     ],
+     [
+      "finished",
+      3963,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 20,
+    "used": 50.3,
+    "laps": [
+     [
+      "finished",
+      3884,
+      1.0
+     ],
+     [
+      "finished",
+      3842,
+      1.0
+     ],
+     [
+      "finished",
+      3861,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 100,
+    "used": 162.0,
+    "laps": [
+     [
+      "finished",
+      3719,
+      1.0
+     ],
+     [
+      "finished",
+      3719,
+      1.0
+     ],
+     [
+      "finished",
+      3727,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 500,
+    "used": 546.1,
+    "laps": [
+     [
+      "finished",
+      3700,
+      1.0
+     ],
+     [
+      "finished",
+      3687,
+      1.0
+     ],
+     [
+      "finished",
+      3722,
+      1.0
+     ]
+    ]
+   },
+   {
+    "budget": 2000,
+    "used": 2052.0,
+    "laps": [
+     [
+      "finished",
+      3670,
+      1.0
+     ],
+     [
+      "finished",
+      3647,
+      1.0
+     ],
+     [
+      "finished",
+      3650,
+      1.0
+     ]
+    ]
+   }
+  ],
+  "pace_from": 0.0,
+  "imitation": [
+   4,
+   5
+  ],
+  "three": 50.3,
+  "steps": 28,
+  "minutes": 7.5
+ }
+]

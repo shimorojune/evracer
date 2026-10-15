@@ -34,7 +34,11 @@ from .paths import WINNERS
 from .racer import LineExpert
 from .smooth import flatten
 
-GENERALS = ["general-solo4-robust2-laps", "general-solo4-es", "general-solo4-mixd-r30"]
+from .general import RULES
+
+#: The general drivers practice starts from (the best of them on each circuit): 39-input ones for solo-6's memory.
+GENERALS = (["general-solo6-es", "general-solo6"] if RULES == "solo-6"
+            else ["general-solo4-robust2-laps", "general-solo4-es", "general-solo4-mixd-r30"])
 TRACKS = ["spielberg", "montreal", "monza", "austin", "spa", "gen:900006", "gen:900001"]
 CHECKPOINTS = (0, 20, 100, 500)
 OUT = WINNERS / "practice"
