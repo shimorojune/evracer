@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fevo notebook lab</title>
+<style>
+  :root {
+    --bg: #f5f4ef; --panel: #ffffff; --fg: #1f1e1d; --muted: #6b6a68; --line: #e3e1da;
+    --grass: #e9eadf; --asphalt: #3b3b3e; --edge: #ffffff; --gate: rgba(127,178,255,.35);
+    --start: #e5484d; --accent: #2563eb; --trail: rgba(37,99,235,.55);
+    --throttle: #16a34a; --brake: #dc2626; --steer: #7c3aed; --warn: #c2410c; --ok: #15803d;
+    --ms-purple: #a855f7; --ms-green: #16a34a; --ms-yellow: #eab308;
+    --note-later: #16a34a; --note-earlier: #dc2626; --note-other: #2563eb; --active: #f59e0b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141413; --panel: #1e1e1d; --fg: #ecebe8; --muted: #9b9a97; --line: #2e2e2c;
+      --grass: #1b1d18; --asphalt: #4a4a4f; --trail: rgba(96,165,250,.6); --warn: #fb923c; --ok: #4ade80;
+      --note-later: #4ade80; --note-earlier: #f87171; --note-other: #60a5fa; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  select, button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .side { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  .scroll { overflow-x: auto; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .panel h2 { font-size: 13px; font-weight: 600; margin: 0; padding: 10px 12px 0; }
+  #main { display: block; width: 100%; height: min(60vh, 640px); background: var(--grass); }
+  #map { display: block; width: 100%; aspect-ratio: 1.3; }
+  #curve { display: block; width: 100%; height: 160px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
+  .stat .k { color: var(--muted); font-size: 12px; } .stat .v { font-size: 22px; font-variant-numeric: tabular-nums; }
+  .stat .v.small { font-size: 15px; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; position: relative; overflow: hidden; }
+  .bar i { position: absolute; top: 0; bottom: 0; }
+  .sliders { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+  .slider label { display: flex; justify-content: space-between; font-size: 13px; }
+  .slider label b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .slider .sub { color: var(--muted); font-size: 12px; }
+  .slider input { width: 100%; }
+  .changed b { color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+  td, th { padding: 4px 12px; text-align: left; border-top: 1px solid var(--line); white-space: nowrap; } th { color: var(--muted); font-weight: 500; }
+  td.bad { color: var(--warn); } td.good { color: var(--ok); }
+  .hint { color: var(--muted); font-size: 12px; padding: 0 12px 12px; }
+  .row { display: flex; gap: 6px; align-items: center; }
+  .ms { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; }
+  .ms i { height: 14px; border-radius: 2px; background: var(--line); }
+  .ms.small i { height: 9px; border-radius: 1px; }
+  .msbox { padding: 0 12px 12px; display: grid; gap: 8px; }
+  .sectors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-variant-numeric: tabular-nums; }
+  .sectors div { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  .sectors b { display: block; font-size: 16px; }
+  td.strip { min-width: 180px; }
+  #notes { list-style: none; margin: 0; padding: 6px 12px 12px; display: grid; gap: 4px; font-variant-numeric: tabular-nums; }
+  #notes li { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); }
+  #notes li.active { border-color: var(--active); box-shadow: inset 3px 0 0 var(--active); }
+  #notes li .km { color: var(--muted); margin-right: 6px; }
+  .check { padding: 8px 12px; font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: 12px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <h1>fevo notebook lab</h1>
+  <label class="row">Track <select id="track"></select></label>
+  <label class="row">Start <select id="seed"></select></label>
+  <button class="primary" id="play">Pause</button>
+  <button id="restart">Restart lap</button>
+  <label class="row"><input type="checkbox" id="useNotes" checked> Notes on</label>
+  <label class="row"><input type="checkbox" id="learn"> Keep learning</label>
+  <button id="fresh">Fresh notebook</button>
+  <button id="stock">Stock aero</button>
+  <label class="row">Speed <select id="rate"><option>0.5</option><option selected>1</option><option>2</option><option>4</option><option>8</option><option>32</option></select>×</label>
+  <label class="row">Zoom <input type="range" id="zoom" min="1" max="12" step="0.5" value="5"></label>
+</header>
+<div class="grid">
+  <div class="side">
+    <div class="panel"><canvas id="main"></canvas></div>
+    <div class="panel">
+      <h2>Lap time by lap (this session, this track)</h2>
+      <canvas id="curve"></canvas>
+      <div class="hint">Each dot is a lap: filled with notes, hollow with notes off; a cross marks a crash. With "Keep learning" on, every lap tries one note at one corner (3 m later braking, 0.02 lock of line, 5 m earlier power) and keeps it only if the lap was clean and that corner got quicker, as the Python notebook does.</div>
+    </div>
+    <div class="panel">
+      <h2>Laps this session</h2>
+      <div class="scroll"><table><thead><tr><th>#</th><th>Track</th><th>Notes</th><th>Start</th><th>Result</th><th>Mini sectors</th><th>S1 / S2 / S3</th><th>Downforce</th><th>Drag</th><th>Front bal.</th></tr></thead><tbody id="laps"></tbody></table></div>
+    </div>
+  </div>
+  <div class="side">
+    <div class="panel">
+      <div class="check" id="check"></div>
+      <div class="stats">
+        <div class="stat"><div class="k">Lap time</div><div class="v" id="time">0:00.00</div></div>
+        <div class="stat"><div class="k">Speed</div><div class="v" id="speed">0 km/h</div></div>
+        <div class="stat"><div class="k">Status</div><div class="v small" id="status">running</div></div>
+        <div class="stat"><div class="k">Note acting now</div><div class="v small" id="acting">–</div></div>
+      </div>
+      <div style="padding:0 12px 12px; display:grid; gap:6px">
+        <div class="k hint" style="padding:0">Throttle | brake (driver's own pedal shown thin)</div><div class="bar"><i id="thrBar"></i><i id="ownBar" style="height:3px;top:2.5px"></i></div>
+        <div class="k hint" style="padding:0">Steer (left − / right +)</div><div class="bar"><i id="steerBar"></i></div>
+        <div class="k hint" style="padding:0">Rear slide / front slide</div><div class="bar"><i id="rsBar"></i></div><div class="bar"><i id="fsBar"></i></div>
+      </div>
+      <div class="msbox">
+        <div class="ms" id="ms"></div>
+        <div class="sectors" id="sectors"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Track notes <span class="pill" id="nbver"></span></h2>
+      <ul id="notes"></ul>
+      <div class="hint">The general driver's weights never change: it steers and drives, and the notes nudge it, the way a driver uses braking markers. Braking later keeps the throttle open until the marker; earlier brakes from the new marker. A line note leans the steering from 80 m before the braking point to the apex, only while the tyres on that side keep margin to the edge. An exit note is a 0.3 floor on the pedal that drops the instant either axle slides.</div>
+    </div>
+    <div class="panel"><canvas id="map"></canvas></div>
+    <div class="panel">
+      <h2>Aero (applies instantly, mid-lap)</h2>
+      <div class="sliders" id="sliders"></div>
+      <div class="hint">The driver and its notes were learned at stock aero; big changes move braking points and corner speeds, so expect it to miss marks or run wide. The page runs solo-4 only: this driver reads solo-4's extended inputs, which solo-1 to solo-3 don't provide.</div>
+    </div>
+  </div>
+</div>
+<script>
+const DATA = /*__DATA__*/null;
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const R = DATA.rules, HZ = R.agentHz, NOBS = R.observationCount;
+const OBS = { REAR_SLIDE: 18, FRONT_SLIDE: 19, MARGIN_L: 21, MARGIN_R: 22, SPEED: 11 };
+const EDGE_KEEP = 0.2, LEAD = 150;
+const KINDS = { brake: 3.0, line: 0.02, exit: 5.0 }, MIN_STEP = { brake: 0.5, line: 0.004, exit: 1.0 };
+const mod = (a, m) => ((a % m) + m) % m;
+const clip = (v) => Math.max(-1, Math.min(1, v));
+
+// ---------- the simulator: the exact sim.wasm, driven step by step as notebook2.run_lap does ----------
+let ex, f64p, i32p;
+function readStr(ptr) { if (!ptr) return ""; const len = new Uint32Array(ex.memory.buffer, ptr - 4, 1)[0]; return String.fromCharCode(...new Uint16Array(ex.memory.buffer, ptr, len / 2)); }
+const writeF64 = (vals) => new Float64Array(ex.memory.buffer, f64p, vals.length).set(vals);
+const writeI32 = (vals) => new Int32Array(ex.memory.buffer, i32p, vals.length).set(vals);
+const ORDER = R.carParamOrder;
+const STOCK = Object.fromEntries(ORDER.map((k, i) => [k, DATA.car[i]]));
+const aero = { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront };
+function applyCar() { writeF64(ORDER.map((k) => (k in aero ? aero[k] : STOCK[k]))); ex.setCarParamsFromScratch(ORDER.length); }
+async function boot() {
+  const bytes = Uint8Array.from(atob(DATA.wasm), (c) => c.charCodeAt(0));
+  const { instance } = await WebAssembly.instantiate(bytes, { env: { abort(msg, file, line, col) { throw new Error(`simulator assert failed: ${readStr(msg)} (${readStr(file)}:${line}:${col})`); } } });
+  ex = instance.exports; f64p = ex.scratchF64(); i32p = ex.scratchI32();
+  applyCar();
+  ex.setRearSlideModel(R.rearSlide[0], R.rearSlide[1]);
+  ex.setTrackLimits(R.trackLimits);
+  ex.setObservationSet(R.observationSet);
+  ex.setTiming(R.agentHz, R.physicsSubsteps);
+  ex.setLimits(R.maxSteps, R.stopSpeedMps, R.stopSteps);
+  ex.setSensors(R.rayCount, R.rayLengthM, R.rayFovRad, R.speedNormMps);
+  ex.setSpeedLimit(0);
+}
+let T, n, ITEM, g, BOUNDS, msPaths, loadedProgram = null;
+function loadTrack(item) {
+  ITEM = item; T = DATA.tracks[item.spec]; n = T.widthLeft.length;
+  writeF64([...T.centerline, ...T.widthLeft, ...T.widthRight]); writeI32(T.gates);
+  ex.loadTrackFromScratch(n, T.gates.length);
+  if (loadedProgram !== item.driver) {
+    const P = DATA.programs[item.driver];
+    writeI32([...P.io, ...P.nodeInts, ...P.linkSlots]); writeF64([...P.nodeFloats, ...P.linkWeights]);
+    ex.loadAgentFromScratch(P.slotCount, P.io.length, P.nodeInts.length / 5, P.linkSlots.length);
+    loadedProgram = item.driver;
+  }
+  g = geometry(); BOUNDS = Array.from({ length: MS - 1 }, (_, i) => Math.round(((i + 1) * T.gates.length) / MS));
+  msPaths = (() => { const c = T.centerline, a0 = [T.gates[0], ...BOUNDS.map((k) => T.gates[k])], a1 = [...BOUNDS.map((k) => T.gates[k]), T.gates[0] + n];
+    return a0.map((a, k) => { const p = new Path2D(); for (let i = a; i <= a1[k]; i++) { const q = i % n; i === a ? p.moveTo(c[2*q], c[2*q+1]) : p.lineTo(c[2*q], c[2*q+1]); } return p; }); })();
+  NB = makeNotebook(item);
+  PR = makePractice();
+  if (!BEST[item.label]) BEST[item.label] = { all: Array(MS).fill(Infinity), sec: [Infinity, Infinity, Infinity] };
+}
+
+// ---------- the notebook: notebook2.Notebook.apply, ported line for line ----------
+let NB, PR;
+function makeNotebook(item) {
+  return { points: item.points, apex: item.apex, power: item.power,
+           notes: { brake: [...item.notes.brake], line: [...item.notes.line], exit: [...item.notes.exit] } };
+}
+const D = (j, p) => mod(j - p + Math.floor(n / 2), n) - Math.floor(n / 2);
+function applyNotes(j, steer, own, obs) {
+  let thr = own;
+  const N = NB.notes;
+  for (let i = 0; i < NB.points.length; i++) {
+    const p = NB.points[i], d = D(j, p), s = N.brake[i];
+    if (s > 0 && -60 <= d && d < s && own < 0) thr = 1.0;
+    else if (s < 0 && s <= d && d < 0) thr = Math.min(own, -0.7);
+    const bias = N.line[i], toApex = D(NB.apex[i], p);
+    if (bias && -80 <= d && d < Math.max(toApex, 1)) {
+      const margin = bias < 0 ? obs[OBS.MARGIN_L] : obs[OBS.MARGIN_R];
+      if (margin > EDGE_KEEP) steer += bias;
+    }
+    const e = N.exit[i], dp = D(j, NB.power[i]);
+    if (e > 0 && -e <= dp && dp < 0 && own < 0.3 && Math.max(Math.abs(obs[OBS.REAR_SLIDE]), Math.abs(obs[OBS.FRONT_SLIDE])) < 0.05) thr = 0.3;
+  }
+  return [steer, thr];
+}
+function zoneOf(j) {
+  const k = NB.points.length;
+  for (let i = 0; i < k; i++) { const span = mod(NB.points[(i + 1) % k] - NB.points[i], n) || n; if (mod(j - (NB.points[i] - LEAD), n) < span) return i; }
+  return k - 1;
+}
+function readable(i) {
+  const N = NB.notes, parts = [], b = N.brake[i], ln = N.line[i], e = N.exit[i];
+  if (Math.abs(b) >= 0.5) parts.push(`brake ${Math.abs(b).toFixed(0)} m ${b > 0 ? "later" : "earlier"}`);
+  if (Math.abs(ln) >= 0.004) parts.push(`turn in from further ${ln < 0 ? "left" : "right"} (${Math.abs(ln).toFixed(2)} lock)`);
+  if (e >= 1) parts.push(`back on the power ${e.toFixed(0)} m earlier`);
+  return parts.length ? parts.join(", ") : "driver's own instinct";
+}
+// ---------- practice: notebook2.Practice (one note at one corner per lap, kept only if clean and quicker) ----------
+function makePractice() {
+  const k = NB.points.length;
+  return { step: Object.fromEntries(Object.entries(KINDS).map(([kind, s]) => [kind, Array(k).fill(s)])),
+           sign: Array.from({ length: k }, () => (Math.random() < 0.5 ? -1 : 1)), best: Array(k).fill(Infinity), trial: null, refills: 0, kept: 0 };
+}
+function zoneTime(at, z) {
+  const a = mod(NB.points[z] - LEAD, n), span = mod(NB.points[(z + 1) % NB.points.length] - NB.points[z], n) || n;
+  let t = 0; for (let i = 0; i < span; i++) t += at[(a + i) % n]; return t;
+}
+function plan() {
+  const c = [];
+  for (const kind of Object.keys(KINDS)) for (let z = 0; z < NB.points.length; z++) if (PR.step[kind][z] >= MIN_STEP[kind]) c.push([PR.step[kind][z] / KINDS[kind], Math.random(), kind, z]);
+  if (!c.length) { PR.refills++; for (const kind of Object.keys(KINDS)) PR.step[kind].fill(KINDS[kind] / 2 ** PR.refills); return plan(); }
+  c.sort((a, b) => b[0] - a[0] || b[1] - a[1]);
+  const [, , kind, z] = c[0], before = NB.notes[kind][z];
+  NB.notes[kind][z] = before + PR.step[kind][z] * (kind === "line" ? PR.sign[z] : 1);
+  PR.trial = { kind, z, before };
+}
+function judge(lap) {
+  const clean = lap.status === "finished";
+  if (PR.trial) {
+    const { kind, z, before } = PR.trial, t = zoneTime(lap.at, z);
+    if (clean && t < PR.best[z] - 0.5) { PR.best[z] = t; PR.kept++; }
+    else { NB.notes[kind][z] = before; PR.step[kind][z] *= 0.5; if (kind === "line") PR.sign[z] *= -1; }
+  }
+  if (clean) { for (let z = 0; z < NB.points.length; z++) if (!PR.trial || z !== PR.trial.z) PR.best[z] = Math.min(PR.best[z], zoneTime(lap.at, z)); }
+  else { const z = zoneOf(mod(lap.point, n)); if (!PR.trial || z !== PR.trial.z) NB.notes.brake[z] -= 3.0; }
+  PR.trial = null;
+}
+
+// ---------- geometry ----------
+function geometry() {
+  const c = T.centerline, left = new Path2D(), right = new Path2D(), L = [], Rr = [];
+  for (let i = 0; i < n; i++) {
+    const p = (i - 1 + n) % n, q = (i + 1) % n, tx = c[2*q] - c[2*p], ty = c[2*q+1] - c[2*p+1], len = Math.hypot(tx, ty);
+    const nx = -ty / len, ny = tx / len, x = c[2*i], y = c[2*i+1];
+    L.push([x + nx * T.widthLeft[i], y + ny * T.widthLeft[i]]); Rr.push([x - nx * T.widthRight[i], y - ny * T.widthRight[i]]);
+  }
+  L.forEach(([x, y], i) => (i ? left.lineTo(x, y) : left.moveTo(x, y))); left.closePath();
+  Rr.forEach(([x, y], i) => (i ? right.lineTo(x, y) : right.moveTo(x, y))); right.closePath();
+  const surface = new Path2D(); surface.addPath(left); surface.addPath(right);
+  const start = new Path2D(); start.moveTo(...L[T.gates[0]]); start.lineTo(...Rr[T.gates[0]]);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of [...L, ...Rr]) { minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); }
+  return { left, right, surface, start, L, Rr, bounds: { minX, minY, maxX, maxY } };
+}
+
+// ---------- mini sectors (as the aero lab) ----------
+const MS = 24, MS_PER_SECTOR = 8, BEST = {};
+const msColour = (t, best) => (t < best ? "purple" : "yellow");
+function crossFraction(gi, x0, y0, x1, y1) {
+  const c = T.centerline, a = (gi - 1 + n) % n;
+  let tx = c[2*gi] - c[2*a], ty = c[2*gi+1] - c[2*a+1]; const len = Math.hypot(tx, ty); tx /= len; ty /= len;
+  const mx = (c[2*a] + c[2*gi]) / 2, my = (c[2*a+1] + c[2*gi+1]) / 2;
+  const s0 = (x0 - mx) * tx + (y0 - my) * ty, s1 = (x1 - mx) * tx + (y1 - my) * ty;
+  return s1 > s0 ? Math.min(1, Math.max(0, -s0 / (s1 - s0))) : 1;
+}
+function completeMini(endStep) {
+  const k = state.msEnds.length, t = endStep - (k ? state.msEnds[k - 1] : 0), b = BEST[ITEM.label];
+  state.msEnds.push(endStep); state.msTimes.push(t); state.msCols.push(t < b.all[k] ? "purple" : "yellow"); b.all[k] = Math.min(b.all[k], t);
+  if ((k + 1) % MS_PER_SECTOR === 0) { const s = (k + 1) / MS_PER_SECTOR - 1, st = state.msTimes.slice(s * MS_PER_SECTOR).reduce((a, v) => a + v, 0);
+    state.secTimes[s] = st; state.secCols[s] = st < b.sec[s] ? "purple" : "yellow"; b.sec[s] = Math.min(b.sec[s], st); }
+}
+
+// ---------- the live lap ----------
+const STATUS = ["running", "finished", "crashed", "stopped", "error", "timed-out"];
+let state, trail, lapNo = 0, playing = true, carry = 0, last = performance.now();
+const history = [], curve = {};
+function fmtTime(steps) { const cs = Math.round((steps / HZ) * 100); return `${Math.floor(cs / 6000)}:${String(((cs % 6000) / 100).toFixed(2)).padStart(5, "0")}`; }
+const observe = () => Array.from({ length: NOBS }, (_, i) => ex.getObservation(i));
+function restart() {
+  if ($("learn").checked && $("useNotes").checked) plan();
+  const s = DATA.seeds[Number($("seed").value)];
+  ex.resetAtStart(s.lateralM, s.headingRad, R.initialSpeedMps);
+  state = { status: "running", notes: $("useNotes").checked, learning: $("learn").checked && $("useNotes").checked, seed: Number($("seed").value),
+            obs: observe(), at: new Float64Array(n), msEnds: [], msTimes: [], msCols: [], secTimes: [null, null, null], secCols: [null, null, null],
+            steer: 0, thr: 0, own: 0, zone: -1 };
+  trail = []; lapNo++; read();
+}
+function read() { state.x = ex.getX(); state.y = ex.getY(); state.yaw = ex.getYaw(); state.vx = ex.getVx(); state.steps = ex.getSteps(); state.gates = ex.getGatesPassed(); state.fs = ex.getFrontSlide(); state.rs = ex.getRearSlide(); }
+/** One step exactly as notebook2.run_lap: evaluate the driver on what it sees, apply the notes, step. */
+function step() {
+  const x0 = state.x, y0 = state.y, j = mod(ex.getProgressIndex(), n);
+  writeF64(state.obs); ex.evaluateAgentFromScratch(NOBS);
+  const steerRaw = ex.getAgentSteer(), own = clip(ex.getAgentThrottle());
+  const [steer, thr] = state.notes ? applyNotes(j, steerRaw, own, state.obs) : [steerRaw, own];
+  state.at[j] += 1;
+  const code = ex.step(clip(steer), clip(thr));
+  state.obs = observe(); state.steer = clip(steer); state.thr = clip(thr); state.own = own; state.zone = zoneOf(j);
+  read();
+  while (state.msEnds.length < BOUNDS.length && state.gates >= BOUNDS[state.msEnds.length]) completeMini(state.steps - 1 + crossFraction(T.gates[BOUNDS[state.msEnds.length]], x0, y0, state.x, state.y));
+  if (code === 1 && state.msEnds.length === BOUNDS.length) completeMini(state.steps);
+  trail.push([state.x, state.y]); if (trail.length > 6 * HZ) trail.shift();
+  if (code !== 0) finish(STATUS[code] || "error");
+}
+function finish(status) {
+  state.status = status;
+  const lap = { no: lapNo, label: ITEM.label, notes: state.notes, learning: state.learning, seed: state.seed, status, steps: state.steps, gates: state.gates,
+                point: ex.getProgressIndex(), at: state.at, aero: { ...aero }, msCols: [...state.msCols], msTimes: [...state.msTimes], secTimes: [...state.secTimes], secCols: [...state.secCols] };
+  if (state.check) return;  // the hidden Python-check lap is not part of the session
+  if (state.learning) judge(lap);
+  history.unshift(lap); (curve[ITEM.label] ||= []).push(lap);
+  renderLaps(); renderNotes();
+  setTimeout(() => { if (state.status !== "running") restart(); }, $("rate").value === "32" ? 50 : 1400);
+}
+/** Run one whole lap at once (for the Python check and automated tests). */
+function runLapNow(check = false) { restart(); state.check = check; while (state.status === "running") step(); return { status: state.status, steps: state.steps }; }
+
+// ---------- sliders (as the aero lab) ----------
+const SLIDERS = [
+  { key: "downforceAreaM2", label: "Downforce (CL·A)", min: 0.5, max: 1.5, step: 0.01, rel: true, unit: "m²", sub: "Grip grows with downforce × speed²." },
+  { key: "dragAreaM2", label: "Drag (CD·A)", min: 0.5, max: 1.5, step: 0.01, rel: true, unit: "m²", sub: "Sets top speed and acceleration at speed." },
+  { key: "aeroBalanceFront", label: "Aero balance (front share)", min: 0.35, max: 0.6, step: 0.001, rel: false, unit: "", sub: "More front: sharper turn-in, lighter rear." },
+];
+function renderSliders() {
+  $("sliders").innerHTML = "";
+  for (const s of SLIDERS) {
+    const stock = STOCK[s.key], val = aero[s.key], pos = s.rel ? val / stock : val, div = document.createElement("div");
+    div.className = "slider" + (Math.abs(val - stock) > 1e-9 ? " changed" : "");
+    div.innerHTML = `<label><span>${s.label}</span><b></b></label><input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${pos}" aria-label="${s.label}"><div class="sub">${s.sub}</div>`;
+    div.querySelector("input").addEventListener("input", (e) => { const v = Number(e.target.value);
+      aero[s.key] = Math.abs((s.rel ? v * stock : v) - stock) <= (s.rel ? s.step * stock : s.step) / 2 ? stock : s.rel ? v * stock : v; applyCar(); syncSliders(); });
+    $("sliders").appendChild(div);
+  }
+  syncSliders();
+}
+function syncSliders() {
+  [...$("sliders").children].forEach((div, i) => { const s = SLIDERS[i], stock = STOCK[s.key], val = aero[s.key];
+    div.className = "slider" + (Math.abs(val - stock) > 1e-9 ? " changed" : "");
+    div.querySelector("b").textContent = s.rel ? `${val.toFixed(2)} ${s.unit} (${Math.round((100 * val) / stock)}%)` : `${(100 * val).toFixed(1)}% front`;
+    const inp = div.querySelector("input"); if (document.activeElement !== inp) inp.value = s.rel ? val / stock : val; });
+}
+function renderLaps() {
+  $("laps").innerHTML = history.slice(0, 14).map((h) => {
+    const res = h.status === "finished" ? fmtTime(h.steps) : `${h.status} at gate ${h.gates}`;
+    const strip = Array.from({ length: MS }, (_, k) => `<i style="background:${h.msCols[k] ? css(`--ms-${h.msCols[k]}`) : ""}"></i>`).join("");
+    const secs = h.secTimes.map((v, k) => (v == null ? "–" : `<span style="color:${css(`--ms-${h.secCols[k]}`)}">${(v / HZ).toFixed(3)}</span>`)).join(" / ");
+    return `<tr><td>${h.no}</td><td>${h.label.split(" · ")[0]}</td><td>${h.notes ? (h.learning ? "learning" : "on") : "off"}</td><td>${h.seed}</td><td class="${h.status === "finished" ? "good" : "bad"}">${res}</td>
+      <td class="strip"><div class="ms small">${strip}</div></td><td>${secs}</td><td>${Math.round((100 * h.aero.downforceAreaM2) / STOCK.downforceAreaM2)}%</td>
+      <td>${Math.round((100 * h.aero.dragAreaM2) / STOCK.dragAreaM2)}%</td><td>${(100 * h.aero.aeroBalanceFront).toFixed(1)}%</td></tr>`;
+  }).join("");
+}
+function renderNotes() {
+  $("nbver").textContent = `notebook v${ITEM.version}${PR.kept ? ` · ${PR.kept} kept this session` : ""}`;
+  $("notes").innerHTML = NB.points.map((p, i) => `<li data-i="${i}"><span class="km">${(p / 1000).toFixed(2)} km</span>${readable(i)}</li>`).join("");
+}
+
+// ---------- drawing ----------
+function fit(cv) { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; if (cv.width !== Math.round(r.width * d) || cv.height !== Math.round(r.height * d)) { cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); } return d; }
+const noteColour = (i) => (NB.notes.brake[i] > 0.5 ? css("--note-later") : NB.notes.brake[i] < -0.5 ? css("--note-earlier") : NB.notes.line[i] || NB.notes.exit[i] ? css("--note-other") : css("--muted"));
+function marker(ctx, i, r, lw) {
+  const p = NB.points[i], [lx, ly] = g.L[p], [rx, ry] = g.Rr[p];
+  ctx.strokeStyle = noteColour(i); ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(rx, ry); ctx.stroke();
+  if (i === state.zone && state.notes) { ctx.strokeStyle = css("--active"); ctx.lineWidth = lw * 1.8; ctx.beginPath(); ctx.arc((lx + rx) / 2, (ly + ry) / 2, r, 0, 2 * Math.PI); ctx.stroke(); }
+}
+function drawMain() {
+  const cv = $("main"), ctx = cv.getContext("2d"), d = fit(cv), W = cv.width, H = cv.height, zoom = Number($("zoom").value) * d;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = css("--grass"); ctx.fillRect(0, 0, W, H);
+  ctx.setTransform(zoom, 0, 0, -zoom, W / 2 - state.x * zoom, H / 2 + state.y * zoom);
+  ctx.fillStyle = css("--asphalt"); ctx.fill(g.surface, "evenodd");
+  ctx.lineWidth = 0.3; ctx.strokeStyle = css("--edge"); ctx.stroke(g.left); ctx.stroke(g.right);
+  ctx.lineWidth = 0.6; ctx.strokeStyle = css("--start"); ctx.stroke(g.start);
+  ctx.globalAlpha = 0.45; ctx.lineWidth = 2.2; state.msCols.forEach((col, k) => { ctx.strokeStyle = css(`--ms-${col}`); ctx.stroke(msPaths[k]); }); ctx.globalAlpha = 1;
+  if (state.notes) for (let i = 0; i < NB.points.length; i++) marker(ctx, i, 9, 0.6);
+  ctx.beginPath(); trail.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.strokeStyle = css("--trail"); ctx.lineWidth = 0.35; ctx.stroke();
+  ctx.save(); ctx.translate(state.x, state.y); ctx.rotate(state.yaw);
+  ctx.fillStyle = DATA.colors.primary; ctx.fillRect(-R.car.length / 2, -R.car.width / 2, R.car.length, R.car.width);
+  ctx.fillStyle = DATA.colors.accent; ctx.fillRect(-1.6, -0.08, 3.4, 0.16); ctx.restore();
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  if (state.status !== "running") { ctx.font = "600 22px system-ui"; ctx.fillStyle = state.status === "finished" ? css("--ok") : css("--warn"); ctx.fillText(state.status === "finished" ? `Finished ${fmtTime(state.steps)}` : `${state.status.toUpperCase()} at gate ${state.gates}`, 16, 34); }
+}
+function drawMap() {
+  const cv = $("map"), ctx = cv.getContext("2d"), d = fit(cv), W = cv.width, H = cv.height, b = g.bounds, pad = 12 * d;
+  if (W <= 2 * pad || H <= 2 * pad) return;
+  const s = Math.min((W - 2 * pad) / (b.maxX - b.minX), (H - 2 * pad) / (b.maxY - b.minY));
+  const ox = (W - (b.maxX - b.minX) * s) / 2 - b.minX * s, oy = (H + (b.maxY - b.minY) * s) / 2 + b.minY * s;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H); ctx.setTransform(s, 0, 0, -s, ox, oy);
+  ctx.fillStyle = css("--asphalt"); ctx.fill(g.surface, "evenodd");
+  ctx.lineWidth = 2 / s * d; ctx.strokeStyle = css("--start"); ctx.stroke(g.start);
+  for (let i = 0; i < NB.points.length; i++) marker(ctx, i, 14 * d / s, 4 * d / s);
+  ctx.fillStyle = DATA.colors.primary; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5 * d / s;
+  ctx.beginPath(); ctx.arc(state.x, state.y, 5 * d / s, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+}
+function drawCurve() {
+  const cv = $("curve"), ctx = cv.getContext("2d"), d = fit(cv), W = cv.width, H = cv.height, laps = curve[ITEM.label] || [];
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
+  const done = laps.filter((l) => l.status === "finished").map((l) => l.steps), ref = ITEM.python.status === "finished" ? [ITEM.python.steps] : [];
+  const all = [...done, ...ref]; if (!all.length) { ctx.fillStyle = css("--muted"); ctx.font = `${12 * d}px system-ui`; ctx.fillText("No finished laps yet", 12 * d, 24 * d); return; }
+  const lo = Math.min(...all) * 0.995, hi = Math.max(...all) * 1.005, N = Math.max(10, laps.length), L = 40 * d, B = H - 18 * d, Tp = 8 * d;
+  const X = (i) => L + (i + 0.5) * (W - L - 8 * d) / N, Y = (v) => Tp + (hi - v) / (hi - lo || 1) * (B - Tp);
+  ctx.strokeStyle = css("--line"); ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(L, Tp); ctx.lineTo(L, B); ctx.lineTo(W, B); ctx.stroke();
+  ctx.fillStyle = css("--muted"); ctx.font = `${11 * d}px system-ui`; ctx.fillText(fmtTime(hi), 2, Tp + 10 * d); ctx.fillText(fmtTime(lo), 2, B);
+  if (ref.length) { ctx.setLineDash([4 * d, 4 * d]); ctx.strokeStyle = css("--muted"); ctx.beginPath(); ctx.moveTo(L, Y(ref[0])); ctx.lineTo(W, Y(ref[0])); ctx.stroke(); ctx.setLineDash([]); }
+  laps.forEach((l, i) => {
+    const x = X(i);
+    if (l.status !== "finished") { ctx.strokeStyle = css("--warn"); ctx.lineWidth = 1.5 * d; ctx.beginPath(); ctx.moveTo(x - 4 * d, B - 12 * d); ctx.lineTo(x + 4 * d, B - 4 * d); ctx.moveTo(x + 4 * d, B - 12 * d); ctx.lineTo(x - 4 * d, B - 4 * d); ctx.stroke(); return; }
+    ctx.beginPath(); ctx.arc(x, Y(l.steps), 3.5 * d, 0, 2 * Math.PI);
+    if (l.notes) { ctx.fillStyle = css("--accent"); ctx.fill(); } else { ctx.strokeStyle = css("--accent"); ctx.lineWidth = 1.5 * d; ctx.stroke(); }
+  });
+}
+function hud() {
+  $("time").textContent = fmtTime(state.steps); $("speed").textContent = `${Math.round(state.vx * 3.6)} km/h`;
+  $("status").textContent = state.status; $("status").style.color = state.status === "running" ? "" : state.status === "finished" ? css("--ok") : css("--warn");
+  const z = state.zone, acting = state.notes && z >= 0 && Math.abs(state.thr - state.own) + 0 > 1e-9;
+  $("acting").textContent = !state.notes ? "notes off" : z < 0 ? "–" : `${(NB.points[z] / 1000).toFixed(2)} km${acting ? " (changing the pedal)" : ""}`;
+  [...$("notes").children].forEach((li) => li.classList.toggle("active", state.notes && Number(li.dataset.i) === z));
+  for (const [id, t] of [["thrBar", state.thr], ["ownBar", state.own]]) { const e = $(id); e.style.left = t >= 0 ? "50%" : `${50 + 50 * t}%`; e.style.width = `${50 * Math.abs(t)}%`; e.style.background = id === "ownBar" ? css("--fg") : t >= 0 ? css("--throttle") : css("--brake"); }
+  const st = $("steerBar"); st.style.left = state.steer >= 0 ? "50%" : `${50 + 50 * state.steer}%`; st.style.width = `${50 * Math.abs(state.steer)}%`; st.style.background = css("--steer");
+  for (const [id, k] of [["rsBar", state.rs], ["fsBar", state.fs]]) { const e = $(id); e.style.left = "0"; e.style.width = `${100 * k}%`; e.style.background = css("--warn"); }
+  [...$("ms").children].forEach((cell, k) => { const col = state.msCols[k]; cell.style.background = col ? css(`--ms-${col}`) : ""; });
+  $("sectors").innerHTML = state.secTimes.map((v, k) => `<div><span class="hint" style="padding:0">S${k + 1}</span><b style="color:${v == null ? "" : css(`--ms-${state.secCols[k]}`)}">${v == null ? "–" : (v / HZ).toFixed(3) + " s"}</b></div>`).join("");
+}
+function tick(now) {
+  const dt = Math.min(0.5, (now - last) / 1000); last = now;
+  if (playing && state.status === "running") { carry += dt * HZ * Number($("rate").value); let k = Math.floor(carry); carry -= k; while (k-- > 0 && state.status === "running") step(); }
+  try { drawMain(); drawMap(); drawCurve(); hud(); } finally { requestAnimationFrame(tick); }
+}
+function selectTrack(idx) {
+  loadTrack(DATA.items[idx]);
+  $("seed").value = String(ITEM.start);
+  renderNotes(); restart();
+  // The Python check: the same lap (notes on, its practice start, stock aero) run here at once.
+  const wasLearning = $("learn").checked, notesOn = $("useNotes").checked, saved = { ...aero };
+  $("learn").checked = false; $("useNotes").checked = true; Object.assign(aero, { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront }); applyCar();
+  const js = runLapNow(true); lapNo--;
+  $("learn").checked = wasLearning; $("useNotes").checked = notesOn; Object.assign(aero, saved); applyCar();
+  const py = ITEM.python, same = js.status === py.status && js.steps === py.steps;
+  ITEM.js = js;
+  $("check").innerHTML = `Same lap in Python (notebook2, start ${ITEM.start}, stock aero): <b>${py.status === "finished" ? fmtTime(py.steps) : py.status}</b> · here: <b>${js.status === "finished" ? fmtTime(js.steps) : js.status}</b> <span class="pill" style="color:${same ? css("--ok") : css("--warn")}">${same ? "identical" : "differs"}</span>`;
+  restart();
+}
+
+boot().then(() => {
+  DATA.seeds.forEach((_, i) => $("seed").add(new Option(String(i), String(i))));
+  DATA.items.forEach((it, i) => $("track").add(new Option(it.label, String(i))));
+  for (let k = 0; k < MS; k++) $("ms").appendChild(document.createElement("i"));
+  const pref = DATA.items.findIndex((it) => it.spec === "gen:950005" && it.version === 1);
+  $("track").value = String(Math.max(0, pref));
+  renderSliders();
+  selectTrack(Number($("track").value));
+  $("track").onchange = () => selectTrack(Number($("track").value));
+  $("play").onclick = () => { playing = !playing; $("play").textContent = playing ? "Pause" : "Play"; };
+  $("restart").onclick = () => restart();
+  $("seed").onchange = () => restart();
+  $("useNotes").onchange = () => restart();
+  $("learn").onchange = () => restart();
+  $("fresh").onclick = () => { for (const k of Object.keys(NB.notes)) NB.notes[k].fill(0); PR = makePractice(); renderNotes(); restart(); };
+  $("stock").onclick = () => { Object.assign(aero, { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront }); applyCar(); syncSliders(); };
+  addEventListener("keydown", (e) => { if (e.key === " " && e.target === document.body) { e.preventDefault(); $("play").click(); } if (e.key === "r") restart(); });
+  window.__nb = { DATA, runLapNow, selectTrack, item: () => ITEM, notes: () => NB, state: () => state };
+  requestAnimationFrame((t) => { last = t; tick(t); });
+}).catch((e) => { document.body.insertAdjacentHTML("afterbegin", `<pre style="color:#c00;padding:16px">${e.stack || e}</pre>`); throw e; });
+</script>
+</body>
+</html>
