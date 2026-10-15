@@ -76,6 +76,7 @@
   <label class="row"><input type="checkbox" id="learn"> Keep learning</label>
   <button id="fresh">Fresh notebook</button>
   <button id="stock">Stock aero</button>
+  <button id="export" title="Every lap this session with its notes, the change tried, start and aero, for exact replay in Python">Export laps</button>
   <label class="row">Speed <select id="rate"><option>0.5</option><option selected>1</option><option>2</option><option>4</option><option>8</option><option>32</option></select>×</label>
   <label class="row">Zoom <input type="range" id="zoom" min="1" max="12" step="0.5" value="5"></label>
 </header>
@@ -314,7 +315,9 @@ function restart(check = false) {
   if (!check && $("learn").checked && $("useNotes").checked) plan();
   const s = DATA.seeds[Number($("seed").value)];
   ex.resetAtStart(s.lateralM, s.headingRad, R.initialSpeedMps);
-  state = { status: "running", notes: $("useNotes").checked, learning: $("learn").checked && $("useNotes").checked, seed: Number($("seed").value),
+  state = { status: "running", notes: $("useNotes").checked,
+            // Everything that decides this lap, so it can be replayed exactly (fevoracer.notebook_replay).
+            snapshot: { notes: JSON.parse(JSON.stringify(NB.notes)), trial: PR.trial ? { ...PR.trial } : null, aero: { ...aero } }, learning: $("learn").checked && $("useNotes").checked, seed: Number($("seed").value),
             obs: observe(), at: new Float64Array(n), msEnds: [], msTimes: [], msCols: [], secTimes: [null, null, null], secCols: [null, null, null],
             steer: 0, thr: 0, own: 0, zone: -1 };
   trail = []; lapNo++; read();
@@ -337,7 +340,8 @@ function step() {
 }
 function finish(status) {
   state.status = status;
-  const lap = { no: lapNo, label: ITEM.label, notes: state.notes, learning: state.learning, seed: state.seed, status, steps: state.steps, gates: state.gates,
+  const lap = { no: lapNo, label: ITEM.label, spec: ITEM.spec, driver: ITEM.driver, corners: { points: NB.points, apex: NB.apex, power: NB.power },
+                snapshot: state.snapshot, notes: state.notes, learning: state.learning, seed: state.seed, status, steps: state.steps, gates: state.gates,
                 point: ex.getProgressIndex(), at: state.at, aero: { ...aero }, msCols: [...state.msCols], msTimes: [...state.msTimes], secTimes: [...state.secTimes], secCols: [...state.secCols] };
   if (state.check) return;  // the hidden Python-check lap is not part of the session
   if (state.learning) judge(lap);
@@ -518,6 +522,12 @@ boot().then(() => {
   $("learn").onchange = () => restart();
   $("fresh").onclick = () => { for (const k of Object.keys(NB.notes)) NB.notes[k].fill(0); PR = makePractice(); renderNotes(); restart(); };
   $("stock").onclick = () => { Object.assign(aero, { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront }); applyCar(); syncSliders(); reprobe(); };
+  $("export").onclick = () => {
+    const laps = history.slice().reverse().map((h) => ({ no: h.no, track: h.spec, driver: h.driver, start: h.seed, notesOn: h.notes, learning: h.learning,
+      corners: h.corners, notes: h.snapshot.notes, trial: h.snapshot.trial, aero: h.snapshot.aero, status: h.status, steps: h.steps, gates: h.gates }));
+    const blob = new Blob([JSON.stringify({ format: "fevo-notebook-laps/1", rules: R.id, laps }, null, 1)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `notebook-laps-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`; a.click();
+  };
   addEventListener("keydown", (e) => { if (e.key === " " && e.target === document.body) { e.preventDefault(); $("play").click(); } if (e.key === "r") restart(); });
   window.__nb = { DATA, runLapNow, selectTrack, item: () => ITEM, notes: () => NB, state: () => state };
   requestAnimationFrame((t) => { last = t; tick(t); });
