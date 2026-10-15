@@ -310,8 +310,8 @@ let state, trail, lapNo = 0, playing = true, carry = 0, last = performance.now()
 const history = [], curve = {};
 function fmtTime(steps) { const cs = Math.round((steps / HZ) * 100); return `${Math.floor(cs / 6000)}:${String(((cs % 6000) / 100).toFixed(2)).padStart(5, "0")}`; }
 const observe = () => Array.from({ length: NOBS }, (_, i) => ex.getObservation(i));
-function restart() {
-  if ($("learn").checked && $("useNotes").checked) plan();
+function restart(check = false) {
+  if (!check && $("learn").checked && $("useNotes").checked) plan();
   const s = DATA.seeds[Number($("seed").value)];
   ex.resetAtStart(s.lateralM, s.headingRad, R.initialSpeedMps);
   state = { status: "running", notes: $("useNotes").checked, learning: $("learn").checked && $("useNotes").checked, seed: Number($("seed").value),
@@ -346,7 +346,7 @@ function finish(status) {
   setTimeout(() => { if (state.status !== "running") restart(); }, $("rate").value === "32" ? 50 : 1400);
 }
 /** Run one whole lap at once (for the Python check and automated tests). */
-function runLapNow(check = false) { restart(); state.check = check; while (state.status === "running") step(); return { status: state.status, steps: state.steps }; }
+function runLapNow(check = false) { restart(check); state.check = check; while (state.status === "running") step(); return { status: state.status, steps: state.steps }; }
 
 // ---------- sliders (as the aero lab) ----------
 const SLIDERS = [
@@ -460,7 +460,7 @@ function tick(now) {
 function selectTrack(idx) {
   loadTrack(DATA.items[idx]);
   $("seed").value = String(ITEM.start);
-  renderNotes(); restart();
+  renderNotes(); restart(true);
   // The Python check: the same lap (notes on, its practice start, stock aero) run here at once.
   const wasLearning = $("learn").checked, notesOn = $("useNotes").checked, saved = { ...aero };
   $("learn").checked = false; $("useNotes").checked = true; Object.assign(aero, { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront }); applyCar();
