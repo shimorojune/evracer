@@ -172,6 +172,8 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
                 nfin = sum(r[2] for r in noisy)
                 key = fin + nfin
                 line += f"  | with error {robust_select}: {nfin}/{len(noisy)} ({np.mean([r[3] for r in noisy]):.0%})"
+            # Every scored network is kept, so a good one that is not the pick is not lost.
+            (CHECKPOINTS / f"{name}-{label.replace(' ', '')}.json").write_text(json.dumps(mlp) + "\n")
             # Laps finished on the held-out tracks first, mean completion as the tiebreak.
             if (key, score) > best:
                 best = (key, score)
