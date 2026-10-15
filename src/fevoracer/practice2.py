@@ -68,9 +68,49 @@ def own_lap(sim: fevo.Simulator, mlp: dict, seed: int) -> tuple[np.ndarray, np.n
     return np.array(xs, np.float32), np.array(ys, np.float32), st, sim.steps
 
 
+def profile(sim: fevo.Simulator, mlp: dict, seed: int) -> tuple[np.ndarray, float]:
+    """The driver's own speed at each centre-line point of one official start (until it ends), and metres driven."""
+    sim.load_program(fevo.from_json(json.dumps(mlp)))
+    n = sim.track.points
+    v = np.full(n, np.nan)
+    sim.reset(seed)
+    st, last = "running", 0
+    while st == "running":
+        st = sim.agent_step()
+        last = sim.progress_index
+        v[last % n] = sim.core.call("getVx")
+    good = ~np.isnan(v)
+    v = np.interp(np.arange(n), np.where(good)[0], v[good]) if good.any() else np.full(n, 30.0)
+    return v, float(last)
+
+
+def drive_dist(sim: fevo.Simulator, mlp: dict, lap_seed: int, starts: list, stint: int) -> tuple[float, float]:
+    """Focused practice: a lap from an official start and stints; fitness is the mean distance covered (a crash
+    ends a run, so reaching it sooner earns nothing), and the metres driven."""
+    sim.load_program(fevo.from_json(json.dumps(mlp)))
+    n = sim.track.points
+    sim.reset(lap_seed)
+    st = sim.run_agent_lap()
+    dists = [float(n if st == "finished" else sim.progress_index)]
+    for point, lat, hdg, speed in starts:
+        sim.reset(1, point=point, lateral_m=lat, heading_rad=hdg, speed=speed)
+        prev, dist, st = point, 0, "running"
+        for _ in range(stint):
+            st = sim.agent_step()
+            idx = sim.progress_index
+            d = idx - prev
+            dist += d + n if d < -n // 2 else d - n if d > n // 2 else d
+            prev = idx
+            if st != "running":
+                break
+        dists.append(float(max(0, dist)))
+    return float(np.mean(dists)), float(sum(dists))
+
+
 def practise(args: tuple) -> dict:
     (spec, pairs, pace_pairs, sigma, lr, stints, stint, crash_s, budget, imitate_every, imitate_steps, seed, unlock,
-     out_dir) = args
+     out_dir, focus) = args
+    prof_for, prof = None, None
     out_dir = WINNERS / out_dir
     # With unlock < 3 the pace phase starts with a start still crashing: candidates then drive all three starts and
     # drivers rank by finished starts, then the mean time of those (pace_rank); otherwise practice2's rules.
@@ -140,7 +180,36 @@ def practise(args: tuple) -> dict:
     while marks:
         step_n += 1
         lapped = rank(best_laps)[0] >= unlock
-        if not lapped:
+        if not lapped and focus:
+            # Focused survival practice: stints from just before where the best driver crashes, at its own speed
+            # there (0.6-1.05x) and spread across the track; fitness is distance covered. Wider search.
+            crashing = [(c, i) for i, (st_, _, c) in enumerate(best_laps) if st_ != "finished"]
+            _, lap_seed = min(crashing)
+            fail = int(min(crashing)[0] * n)
+            key = (lap_seed, fail)
+            if prof_for != key:
+                prof, metres = profile(sim, unflatten(base, best_x), lap_seed)
+                used += metres / n
+                prof_for = key
+                report.setdefault("failures", []).append({"at_laps": round(used, 1), "point": fail})
+            starts = []
+            for _ in range(stints):
+                p = (fail - int(rng.integers(50, 400))) % n
+                starts.append((p, float(rng.uniform(-2.0, 2.0)), float(rng.uniform(-0.03, 0.03)),
+                               float(max(10.0, prof[p] * rng.uniform(0.6, 1.05)))))
+            fpairs, fsig = focus
+            e = rng.standard_normal((fpairs, len(x)))
+            e[:, frozen] = 0.0
+            fits = []
+            for c in [x + fsig * k for k in e] + [x - fsig * k for k in e]:
+                f, metres = drive_dist(sim, unflatten(base, c), lap_seed, starts, stint)
+                fits.append(f)
+                used += metres / n
+            r_ = np.empty(len(fits))
+            r_[np.argsort(fits)] = np.arange(len(fits))
+            u = r_ / (len(fits) - 1) - 0.5
+            adam(((u[:fpairs] - u[fpairs:])[:, None] * e).sum(0) / (2 * fpairs * fsig))
+        elif not lapped:
             # Phase 1: survival practice, as practice.py.
             starts = [(int(rng.integers(n)), float(rng.uniform(-2.0, 2.0)), float(rng.uniform(-0.05, 0.05)),
                        float(rng.uniform(25, 75))) for _ in range(stints)]
@@ -263,6 +332,8 @@ def main() -> None:
     ap.add_argument("--imitate-steps", type=int, default=300)
     ap.add_argument("--unlock", type=int, default=3, help="official starts lapped before the pace phase starts")
     ap.add_argument("--out", default="practice2", help="winners/<out>/")
+    ap.add_argument("--focus-pairs", type=int, default=0, help="focused survival practice: antithetic pairs (0: off)")
+    ap.add_argument("--focus-sigma", type=float, default=6e-3)
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
@@ -271,7 +342,8 @@ def main() -> None:
     idx = [TRACKS.index(s) if s in TRACKS else 100 + k for k, s in enumerate(specs)]
     with mp.get_context("spawn").Pool(a.workers or min(len(specs), max(1, (os.cpu_count() or 2) - 1))) as pool:
         reps = pool.map(practise, [(s, a.pairs, a.pace_pairs, a.sigma, a.lr, a.stints, a.stint, a.crash_s, a.budget,
-                                    a.imitate_every, a.imitate_steps, a.seed + i, a.unlock, a.out)
+                                    a.imitate_every, a.imitate_steps, a.seed + i, a.unlock, a.out,
+                                    (a.focus_pairs, a.focus_sigma) if a.focus_pairs else None)
                                    for i, s in zip(idx, specs)])
     print(f"{'circuit':<12} {'start driver':<28} " + "  ".join(f"{c:>22}" for c in CHECKPOINTS if c <= a.budget) + "  expert")
     for rp in reps:
