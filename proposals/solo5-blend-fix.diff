@@ -1,0 +1,25 @@
+diff --git a/packages/sim-core/assembly/vehicle.ts b/../fevo-racer1/proposals/solo5-vehicle-prototype.ts
+index 11099b3..e8c5d6c 100644
+--- a/packages/sim-core/assembly/vehicle.ts
++++ b/../fevo-racer1/proposals/solo5-vehicle-prototype.ts
+@@ -263,12 +263,18 @@ export function substep(steerCmd: f64, throttleCmd: f64, dt: f64): void {
+   // Below walking pace slip angles are meaningless: blend to the kinematic model.
+   const lo = p(KINEMATIC_BELOW);
+   const hi = p(DYNAMIC_ABOVE);
+-  const w = clamp((nvx - lo) / (hi - lo), 0, 1);
++  // PROTOTYPE (not a rules version): blend on the total speed, not the forward one, and never let the blend
++  // change the velocity faster than the tyres could (mu x weight).
++  const speedNow = Math.sqrt(nvx * nvx + nvy * nvy);
++  const w = clamp((speedNow - lo) / (hi - lo), 0, 1);
+   if (w < 1) {
+     const tanD = Math.tan(delta);
+     const vyKin = (nvx * b * tanD) / L;
+     const rKin = (nvx * tanD) / L;
+-    nvy = w * nvy + (1.0 - w) * vyKin;
++    let blendVy = w * nvy + (1.0 - w) * vyKin;
++    const capDv = Math.max(muF, muR) * g * dt;
++    blendVy = nvy + clamp(blendVy - nvy, -capDv, capDv);
++    nvy = blendVy;
+     nr = w * nr + (1.0 - w) * rKin;
+   }
+ 

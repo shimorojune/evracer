@@ -1,0 +1,77 @@
+585 laps scanned; 58 use free braking at least once (37 of them finish the lap)
+
+general-solo4-es: 5 laps
+  suzuka         crashed              3 steps, worst: 91 km/h lost in one step from 132 km/h (forward 19 km/h) at point 783
+  suzuka         crashed              4 steps, worst: 101 km/h lost in one step from 151 km/h (forward 20 km/h) at point 783
+  zandvoort      crashed              3 steps, worst: 115 km/h lost in one step from 157 km/h (forward 20 km/h) at point 1809
+  zandvoort      crashed              3 steps, worst: 101 km/h lost in one step from 131 km/h (forward 19 km/h) at point 1816
+  austin         crashed              3 steps, worst: 74 km/h lost in one step from 169 km/h (forward 24 km/h) at point 619
+
+general-solo4-robust2-laps: 5 laps
+  norisring      crashed              2 steps, worst: 3 km/h lost in one step from 25 km/h (forward 21 km/h) at point 1686
+  norisring      crashed              2 steps, worst: 3 km/h lost in one step from 24 km/h (forward 21 km/h) at point 1687
+  norisring      crashed              2 steps, worst: 2 km/h lost in one step from 25 km/h (forward 21 km/h) at point 1686
+  austin         crashed              4 steps, worst: 50 km/h lost in one step from 101 km/h (forward 20 km/h) at point 608
+  austin         crashed              3 steps, worst: 59 km/h lost in one step from 148 km/h (forward 22 km/h) at point 608
+
+general-solo4-slow: 3 laps
+  suzuka         crashed              3 steps, worst: 91 km/h lost in one step from 182 km/h (forward 22 km/h) at point 793
+  austin         crashed              3 steps, worst: 130 km/h lost in one step from 169 km/h (forward 21 km/h) at point 627
+  austin         crashed              3 steps, worst: 110 km/h lost in one step from 188 km/h (forward 24 km/h) at point 621
+
+notebook: 5 laps
+  gen:950003     finished   1:15.42   7 steps, worst: 118 km/h lost in one step from 145 km/h (forward 18 km/h) at point 4551
+  gen:950003     finished   1:15.70   5 steps, worst: 195 km/h lost in one step from 253 km/h (forward 23 km/h) at point 4549
+  gen:950003     finished   1:15.38   7 steps, worst: 193 km/h lost in one step from 230 km/h (forward 21 km/h) at point 4549
+  gen:950006     stopped              3 steps, worst: 105 km/h lost in one step from 167 km/h (forward 26 km/h) at point 1794
+  gen:950006     stopped              3 steps, worst: 100 km/h lost in one step from 167 km/h (forward 27 km/h) at point 1794
+
+notebook2: 12 laps
+  gen:950000     finished   1:14.38   3 steps, worst: 112 km/h lost in one step from 253 km/h (forward 28 km/h) at point 1987
+  gen:950000     finished   1:14.27   3 steps, worst: 141 km/h lost in one step from 252 km/h (forward 26 km/h) at point 1988
+  gen:950000     finished   1:14.22   3 steps, worst: 115 km/h lost in one step from 253 km/h (forward 28 km/h) at point 1988
+  gen:950003     finished   1:15.47   7 steps, worst: 184 km/h lost in one step from 220 km/h (forward 20 km/h) at point 4558
+  gen:950003     finished   1:15.52   6 steps, worst: 181 km/h lost in one step from 216 km/h (forward 20 km/h) at point 4558
+  gen:950003     finished   1:15.88   7 steps, worst: 189 km/h lost in one step from 226 km/h (forward 20 km/h) at point 4558
+  gen:950006     crashed              3 steps, worst: 103 km/h lost in one step from 176 km/h (forward 23 km/h) at point 1994
+  gen:950006     crashed              4 steps, worst: 101 km/h lost in one step from 150 km/h (forward 20 km/h) at point 1998
+  gen:960002     crashed              7 steps, worst: 57 km/h lost in one step from 93 km/h (forward 19 km/h) at point 523
+  gen:960002     finished   1:16.40   7 steps, worst: 120 km/h lost in one step from 215 km/h (forward 25 km/h) at point 1162
+  gen:960002     finished   1:15.75   7 steps, worst: 97 km/h lost in one step from 122 km/h (forward 18 km/h) at point 1162
+  montreal       finished   1:33.52   7 steps, worst: 25 km/h lost in one step from 61 km/h (forward 20 km/h) at point 32
+
+practice-500: 6 laps
+  monza          finished   1:37.47   5 steps, worst: 35 km/h lost in one step from 90 km/h (forward 20 km/h) at point 2156
+  monza          finished   1:37.32   6 steps, worst: 40 km/h lost in one step from 122 km/h (forward 21 km/h) at point 2152
+  austin         crashed              3 steps, worst: 74 km/h lost in one step from 169 km/h (forward 24 km/h) at point 619
+  gen:900001     finished   1:07.10   7 steps, worst: 40 km/h lost in one step from 145 km/h (forward 21 km/h) at point 3720
+  gen:900001     finished   1:07.10   6 steps, worst: 49 km/h lost in one step from 150 km/h (forward 21 km/h) at point 3719
+  gen:900001     crashed              7 steps, worst: 40 km/h lost in one step from 145 km/h (forward 21 km/h) at point 3720
+
+practice2-2000: 7 laps
+  spielberg      finished   1:13.23   4 steps, worst: 28 km/h lost in one step from 82 km/h (forward 21 km/h) at point 1395
+  spielberg      finished   1:13.13   4 steps, worst: 31 km/h lost in one step from 95 km/h (forward 21 km/h) at point 1395
+  monza          finished   1:37.47   5 steps, worst: 35 km/h lost in one step from 90 km/h (forward 20 km/h) at point 2156
+  monza          finished   1:37.32   6 steps, worst: 40 km/h lost in one step from 122 km/h (forward 21 km/h) at point 2152
+  gen:900001     finished   1:07.10   7 steps, worst: 40 km/h lost in one step from 145 km/h (forward 21 km/h) at point 3720
+  gen:900001     finished   1:07.10   6 steps, worst: 49 km/h lost in one step from 150 km/h (forward 21 km/h) at point 3719
+  gen:900001     crashed              7 steps, worst: 40 km/h lost in one step from 145 km/h (forward 21 km/h) at point 3720
+
+practice3-2000: 3 laps
+  monza          finished   1:32.85   4 steps, worst: 84 km/h lost in one step from 130 km/h (forward 20 km/h) at point 2151
+  monza          finished   1:33.32   3 steps, worst: 68 km/h lost in one step from 147 km/h (forward 22 km/h) at point 2150
+  monza          finished   1:33.15   3 steps, worst: 71 km/h lost in one step from 144 km/h (forward 22 km/h) at point 2151
+
+distill-teachers-500: 12 laps
+  slow:500076    finished   1:31.18   5 steps, worst: 152 km/h lost in one step from 187 km/h (forward 20 km/h) at point 2228
+  slow:500076    finished   1:31.72   5 steps, worst: 111 km/h lost in one step from 213 km/h (forward 26 km/h) at point 2228
+  slow:500076    finished   1:31.75   5 steps, worst: 114 km/h lost in one step from 214 km/h (forward 26 km/h) at point 2228
+  gen:240133     finished   1:23.78   5 steps, worst: 138 km/h lost in one step from 231 km/h (forward 21 km/h) at point 3120
+  gen:240133     finished   1:22.97   4 steps, worst: 108 km/h lost in one step from 170 km/h (forward 20 km/h) at point 3121
+  gen:240133     finished   1:22.77   5 steps, worst: 139 km/h lost in one step from 228 km/h (forward 21 km/h) at point 3120
+  mix:222741     finished   1:37.37   3 steps, worst: 113 km/h lost in one step from 141 km/h (forward 20 km/h) at point 807
+  mix:222741     finished   1:37.15   3 steps, worst: 111 km/h lost in one step from 138 km/h (forward 20 km/h) at point 807
+  mix:222741     finished   1:37.35   3 steps, worst: 102 km/h lost in one step from 129 km/h (forward 19 km/h) at point 807
+  slow:442798    finished   1:27.25   4 steps, worst: 127 km/h lost in one step from 202 km/h (forward 20 km/h) at point 1314
+  slow:442798    finished   1:27.20   4 steps, worst: 128 km/h lost in one step from 229 km/h (forward 22 km/h) at point 1314
+  slow:442798    finished   1:27.33   4 steps, worst: 128 km/h lost in one step from 204 km/h (forward 20 km/h) at point 1314
