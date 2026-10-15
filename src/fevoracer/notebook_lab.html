@@ -69,6 +69,7 @@
 <header>
   <h1>fevo notebook lab</h1>
   <label class="row">Track <select id="track"></select></label>
+  <label class="row">Rules <select id="rules" title="solo-5 is solo-4 without the low-speed loophole: a spinning car can no longer shed its sideways speed for free"></select></label>
   <label class="row">Start <select id="seed"></select></label>
   <button class="primary" id="play">Pause</button>
   <button id="restart">Restart lap</button>
@@ -130,6 +131,7 @@ const DATA = /*__DATA__*/null;
 const $ = (id) => document.getElementById(id);
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const R = DATA.rules, HZ = R.agentHz, NOBS = R.observationCount;
+let RULES = R.options.find((o) => o.id === R.id) || R.options[R.options.length - 1];
 const OBS = { REAR_SLIDE: 18, FRONT_SLIDE: 19, MARGIN_L: 21, MARGIN_R: 22, SPEED: 11 };
 const EDGE_KEEP = 0.2, LEAD = 150;
 const KINDS = { brake: 3.0, line: 0.02, exit: 5.0 }, MIN_STEP = { brake: 0.5, line: 0.004, exit: 1.0 };
@@ -152,6 +154,7 @@ async function boot() {
   applyCar();
   ex.setRearSlideModel(R.rearSlide[0], R.rearSlide[1]);
   ex.setTrackLimits(R.trackLimits);
+  ex.setLowSpeedModel(RULES.lowSpeed);
   ex.setObservationSet(R.observationSet);
   ex.setTiming(R.agentHz, R.physicsSubsteps);
   ex.setLimits(R.maxSteps, R.stopSpeedMps, R.stopSteps);
@@ -340,7 +343,7 @@ function step() {
 }
 function finish(status) {
   state.status = status;
-  const lap = { no: lapNo, label: ITEM.label, spec: ITEM.spec, driver: ITEM.driver, corners: { points: NB.points, apex: NB.apex, power: NB.power },
+  const lap = { no: lapNo, rules: RULES.id, label: ITEM.label, spec: ITEM.spec, driver: ITEM.driver, corners: { points: NB.points, apex: NB.apex, power: NB.power },
                 snapshot: state.snapshot, notes: state.notes, learning: state.learning, seed: state.seed, status, steps: state.steps, gates: state.gates,
                 point: ex.getProgressIndex(), at: state.at, aero: { ...aero }, msCols: [...state.msCols], msTimes: [...state.msTimes], secTimes: [...state.secTimes], secCols: [...state.secCols] };
   if (state.check) return;  // the hidden Python-check lap is not part of the session
@@ -460,7 +463,7 @@ function drawMap() {
 function drawCurve() {
   const cv = $("curve"), ctx = cv.getContext("2d"), d = fit(cv), W = cv.width, H = cv.height, laps = curve[ITEM.label] || [];
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
-  const done = laps.filter((l) => l.status === "finished").map((l) => l.steps), ref = ITEM.python.status === "finished" ? [ITEM.python.steps] : [];
+  const done = laps.filter((l) => l.status === "finished").map((l) => l.steps), ref = ITEM.python[RULES.id].status === "finished" ? [ITEM.python[RULES.id].steps] : [];
   const all = [...done, ...ref]; if (!all.length) { ctx.fillStyle = css("--muted"); ctx.font = `${12 * d}px system-ui`; ctx.fillText("No finished laps yet", 12 * d, 24 * d); return; }
   const lo = Math.min(...all) * 0.995, hi = Math.max(...all) * 1.005, N = Math.max(10, laps.length), L = 40 * d, B = H - 18 * d, Tp = 8 * d;
   const X = (i) => L + (i + 0.5) * (W - L - 8 * d) / N, Y = (v) => Tp + (hi - v) / (hi - lo || 1) * (B - Tp);
@@ -500,15 +503,18 @@ function selectTrack(idx) {
   $("learn").checked = false; $("useNotes").checked = true; Object.assign(aero, { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront }); applyCar();
   const js = runLapNow(true); lapNo--;
   $("learn").checked = wasLearning; $("useNotes").checked = notesOn; Object.assign(aero, saved); applyCar();
-  const py = ITEM.python, same = js.status === py.status && js.steps === py.steps;
+  const py = ITEM.python[RULES.id], same = js.status === py.status && js.steps === py.steps;
   ITEM.js = js;
-  $("check").innerHTML = `Same lap in Python (notebook2, start ${ITEM.start}, stock aero): <b>${py.status === "finished" ? fmtTime(py.steps) : py.status}</b> · here: <b>${js.status === "finished" ? fmtTime(js.steps) : js.status}</b> <span class="pill" style="color:${same ? css("--ok") : css("--warn")}">${same ? "identical" : "differs"}</span>`;
+  $("check").innerHTML = `Same lap in Python (${RULES.id}, notebook2, start ${ITEM.start}, stock aero): <b>${py.status === "finished" ? fmtTime(py.steps) : py.status}</b> · here: <b>${js.status === "finished" ? fmtTime(js.steps) : js.status}</b> <span class="pill" style="color:${same ? css("--ok") : css("--warn")}">${same ? "identical" : "differs"}</span>`;
   restart();
 }
 
 boot().then(() => {
   DATA.seeds.forEach((_, i) => $("seed").add(new Option(String(i), String(i))));
   DATA.items.forEach((it, i) => $("track").add(new Option(it.label, String(i))));
+  R.options.forEach((o) => $("rules").add(new Option(o.id, o.id)));
+  $("rules").value = RULES.id;
+  $("rules").onchange = () => { RULES = R.options.find((o) => o.id === $("rules").value); ex.setLowSpeedModel(RULES.lowSpeed); reprobe(); selectTrack(Number($("track").value)); };
   for (let k = 0; k < MS; k++) $("ms").appendChild(document.createElement("i"));
   const pref = DATA.items.findIndex((it) => it.spec === "gen:950005" && it.version === 1);
   $("track").value = String(Math.max(0, pref));
@@ -523,9 +529,9 @@ boot().then(() => {
   $("fresh").onclick = () => { for (const k of Object.keys(NB.notes)) NB.notes[k].fill(0); PR = makePractice(); renderNotes(); restart(); };
   $("stock").onclick = () => { Object.assign(aero, { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront }); applyCar(); syncSliders(); reprobe(); };
   $("export").onclick = () => {
-    const laps = history.slice().reverse().map((h) => ({ no: h.no, track: h.spec, driver: h.driver, start: h.seed, notesOn: h.notes, learning: h.learning,
+    const laps = history.slice().reverse().map((h) => ({ no: h.no, rules: h.rules, track: h.spec, driver: h.driver, start: h.seed, notesOn: h.notes, learning: h.learning,
       corners: h.corners, notes: h.snapshot.notes, trial: h.snapshot.trial, aero: h.snapshot.aero, status: h.status, steps: h.steps, gates: h.gates }));
-    const blob = new Blob([JSON.stringify({ format: "fevo-notebook-laps/1", rules: R.id, laps }, null, 1)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ format: "fevo-notebook-laps/1", rules: RULES.id, laps }, null, 1)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `notebook-laps-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`; a.click();
   };
   addEventListener("keydown", (e) => { if (e.key === " " && e.target === document.body) { e.preventDefault(); $("play").click(); } if (e.key === "r") restart(); });

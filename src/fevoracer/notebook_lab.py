@@ -54,12 +54,21 @@ def python_lap(e: dict, sim: fevo.Simulator, tr: fevo.Track) -> tuple[str, int]:
     return lap["status"], lap["steps"]
 
 
+#: Rules versions the page can switch between: same car and inputs, solo-5 without the low-speed loophole.
+SWITCH = ("solo-4", "solo-5")
+
+
 def build(out: str) -> Path:
     rules = fevo.load_rules(general.RULES)
+    sims = {}
+    for rid in SWITCH:
+        sims[rid] = fevo.Simulator(rid)
     setup_d = json.loads((WINNERS / f"{GENERALS[0]}.json").read_text())["setup"]
     setup = [setup_d[k["id"]] for k in rules.setup]
     sim = fevo.Simulator(rules)
     sim.set_setup(setup)
+    for s_ in sims.values():
+        s_.set_setup(setup)
     es = entries()
     tracks, programs, items = {}, {}, []
     for e in es:
@@ -71,11 +80,16 @@ def build(out: str) -> Path:
             mlp = json.loads((WINNERS / f"{e['driver']}.json").read_text())
             assert mlp["setup"] == setup_d, "every general driver shares the setup"
             programs[e["driver"]] = fevo.from_json(json.dumps(mlp)).packed()
-        st, steps = python_lap(e, sim, tr)
+        py = {}
+        for rid, s_ in sims.items():
+            s_.load_track(tr)
+            st_, steps_ = python_lap(e, s_, tr)
+            py[rid] = {"status": st_, "steps": steps_}
+        st, steps = py[rules.id]["status"], py[rules.id]["steps"]
         clean = [c for c in e["curve"] if c > 0]
         items.append({**e, "label": f"{e['spec'].replace('gen:', 'g')} · notebook v{e['version']}"
                       + (f" ({fevo.format_lap_time(clean[-1])})" if clean else " (never lapped)"),
-                      "python": {"status": st, "steps": steps}})
+                      "python": py})
         print(f"{items[-1]['label']:<40} python lap with notes, start {e['start']}: "
               f"{fevo.format_lap_time(steps) if st == 'finished' else st}", flush=True)
     r = rules.raw
@@ -88,6 +102,7 @@ def build(out: str) -> Path:
             "rayCount": r["sensors"]["rayCount"], "rayLengthM": float(r["sensors"]["rayLengthM"]), "rayFovRad": float(r["sensors"]["rayFovRad"]),
             "speedNormMps": float(r["sensors"]["speedNormMps"]), "initialSpeedMps": float(r["start"]["initialSpeedMps"]),
             "rearSlide": list(rules.rear_slide), "trackLimits": rules.track_limits, "observationSet": rules.observation_set,
+            "options": [{"id": rid, "lowSpeed": fevo.load_rules(rid).low_speed_model} for rid in SWITCH],
             "observationCount": len(rules.observation), "carParamOrder": r["carParamOrder"],
             "car": {"length": r["car"]["lengthM"], "width": r["car"]["widthM"]},
         },

@@ -24,13 +24,17 @@ def main() -> None:
     a = ap.parse_args()
     data = json.load(open(a.file))
     setup_d = json.loads((WINNERS / f"{GENERALS[0]}.json").read_text())["setup"]
-    sim = fevo.Simulator(data.get("rules", general.RULES))
-    setup = [setup_d[k["id"]] for k in sim.rules.setup]
-    sim.set_setup(setup)
-    order = sim.rules.raw["carParamOrder"]
+    sims: dict[str, fevo.Simulator] = {}
     for lap in data["laps"]:
         if a.lap is not None and lap["no"] != a.lap:
             continue
+        rid = lap.get("rules", data.get("rules", general.RULES))  # each lap's own rules (the page can switch)
+        if rid not in sims:
+            sims[rid] = fevo.Simulator(rid)
+        sim = sims[rid]
+        setup = [setup_d[k["id"]] for k in sim.rules.setup]
+        sim.set_setup(setup)
+        order = sim.rules.raw["carParamOrder"]
         tr = general._track(lap["track"])
         sim.load_track(tr)
         sim.load_program(fevo.from_json((WINNERS / f"{lap['driver']}.json").read_text()))
@@ -47,7 +51,7 @@ def main() -> None:
         r = run_lap(sim, nb, lap["start"])
         same = r["status"] == lap["status"] and r["steps"] == lap["steps"]
         fmt = lambda st, n: fevo.format_lap_time(n) if st == "finished" else f"{st} at step {n}"  # noqa: E731
-        print(f"lap {lap['no']:3d} {lap['track']:<12} start {lap['start']} notes {'on' if lap['notesOn'] else 'off'}"
+        print(f"lap {lap['no']:3d} {rid} {lap['track']:<12} start {lap['start']} notes {'on' if lap['notesOn'] else 'off'}"
               f"{' trying ' + lap['trial']['kind'] + ' at corner ' + str(lap['trial']['z']) if lap.get('trial') else ''}: "
               f"page {fmt(lap['status'], lap['steps'])}, python {fmt(r['status'], r['steps'])}  {'identical' if same else 'DIFFERS'}")
 

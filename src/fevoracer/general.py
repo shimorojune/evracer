@@ -39,7 +39,9 @@ from .line import racing_line
 from .paths import CHECKPOINTS, WINNERS
 from .racer import LineExpert
 
-RULES = "solo-4"
+#: Rules version for training and scoring: solo-5 (solo-4 without the low-speed free-braking loophole) unless
+#: FEVO_RULES says otherwise. Spawned workers inherit the environment, so the whole pool agrees.
+RULES = os.environ.get("FEVO_RULES", "solo-5")
 #: Inputs a general driver must not use: lap progress by gate (index 12) and by metre (the last, index 32).
 MASKED = (12, 32)
 #: solo-4's next-corner distance input (/ 600 m): under 0.5 means a corner within 300 m.
