@@ -55,9 +55,13 @@ def _prep(spec: str) -> tuple[str, list[int], np.ndarray]:
 _TRACKS: dict[str, fevo.Track] = {}
 
 
-def _episodes(args: tuple) -> list[float]:
-    """Fitness of a chunk of candidates on one circuit: mean progress rate over its lap and stints."""
-    spec, base, cands, seed, starts, stint, crash_s = args
+def _episodes(args: tuple) -> list[tuple[float, float]]:
+    """Fitness of a chunk of candidates on one circuit (mean progress rate over its lap and stints) and the share of
+    stints survived. With noise (act, obs, seed) the stints are driven with explore.py's mistakes: Gaussian noise on
+    what the driver sees and a slowly drifting error on what it does (Ornstein-Uhlenbeck, about half a second), the
+    same noise for every candidate. The lap from the official start is driven clean."""
+    spec, base, cands, seed, starts, stint, crash_s, noise = args
+    act_n, obs_n, noise_seed = noise
     sim = general._SIM
     if spec not in _TRACKS:
         _TRACKS.clear()
@@ -73,26 +77,40 @@ def _episodes(args: tuple) -> list[float]:
         st = sim.run_agent_lap()
         dist = n if st == "finished" else max(0, sim.progress_index if sim.progress_index < n - 100 else 0)
         rates.append(dist / (sim.steps / hz + (0 if st == "finished" else crash_s)))
-        for point, lat, hdg, speed in starts:
-            sim.reset(1, point=point, lateral_m=lat, heading_rad=hdg, speed=speed)
+        survived = 0
+        for k, (point, lat, hdg, speed) in enumerate(starts):
+            obs = sim.reset(1, point=point, lateral_m=lat, heading_rad=hdg, speed=speed)
             prev, dist, st = point, 0, "running"
+            rng = np.random.default_rng([noise_seed, k])
+            ou = np.zeros(2)
+            n_obs = len(obs)
             for _ in range(stint):
-                st = sim.agent_step()
+                if act_n == 0 and obs_n == 0:
+                    st = sim.agent_step()
+                else:
+                    seen = list(np.asarray(obs) + obs_n * rng.standard_normal(n_obs)) if obs_n else obs
+                    steer, thr = sim.evaluate_program(seen)
+                    ou += -ou / 30 + act_n * np.sqrt(2 / 30) * rng.standard_normal(2)
+                    code, vals = sim.step_fast(float(np.clip(steer + ou[0], -1, 1)), float(np.clip(thr + ou[1], -1, 1)))
+                    obs = list(vals[:n_obs])
+                    st = fevo.sim.STATUS[code]
                 idx = sim.progress_index
                 d = idx - prev
                 dist += d + n if d < -n // 2 else d - n if d > n // 2 else d
                 prev = idx
                 if st != "running":
                     break
+            survived += st in ("running", "finished")
             t = sim.steps / hz + (crash_s if st not in ("running", "finished") else 0)
             rates.append(max(0, dist) / max(t, 1e-3))
-        out.append(float(np.mean(rates)))
+        out.append((float(np.mean(rates)), survived / max(1, len(starts))))
     return out
 
 
 def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: float, gen_tracks: int, slow_tracks: int,
         real_tracks: int, stints: int, stint: int, crash_s: float, eval_every: int, chunk: int, workers: int | None,
-        seed: int, fresh: bool, mix_tracks: int = 0) -> None:
+        seed: int, fresh: bool, mix_tracks: int = 0, act_noise: float = 0.0, obs_noise: float = 0.0,
+        noise_max: float = 0.1, noise_up: float = 1.2, survive: float = 0.8) -> None:
     rng = np.random.default_rng(seed)
     base = json.load(open(init))
     setup_d = base.get("setup")
@@ -109,15 +127,18 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
     held = [f"gen:{s}" for s in HELDOUT_GEN] + realtracks.names("test") + ["spielberg"]
     out, state_file = WINNERS / f"{name}.json", CHECKPOINTS / f"{name}-es.pkl"
     m, v, gen0, best = np.zeros_like(x), np.zeros_like(x), 0, -1.0
+    noise = {"act": act_noise, "obs": obs_noise}
     if state_file.is_file() and not fresh:
         st = pickle.loads(state_file.read_bytes())
         x, m, v, gen0, best, rng = st["x"], st["m"], st["v"], st["gen"], st["best"], st["rng"]
+        noise = st.get("noise", noise)
         print(f"resumed at generation {gen0}, best held-out completion {best:.1%}", flush=True)
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
     print(f"General ES on {general.RULES}: {len(x)} numbers ({frozen.sum()} frozen), {2 * pairs} candidates a generation, "
           f"sigma {sigma}, lr {lr}; each generation {gen_tracks} generated + {slow_tracks} slow-corner + {mix_tracks} mixed + {real_tracks} real "
           f"training circuits, a lap and {stints} braking-zone stints of {stint} steps on each, crash +{crash_s} s; "
-          f"held-out scoring every {eval_every} generations", flush=True)
+          f"held-out scoring every {eval_every} generations; stint noise act {act_noise} obs {obs_noise} (x{noise_up} when "
+          f"{survive:.0%} of stints survive, up to {noise_max}), the official-start lap and held-out scoring clean", flush=True)
     t0 = time.time()
     b1, b2, eps = 0.9, 0.999, 1e-8
     with mp.get_context("spawn").Pool(workers, initializer=general._init, initargs=(setup,)) as pool:
@@ -161,20 +182,23 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
                                        float(rng.uniform(0.95, 1.05) * vplan[p])))
                 lap_seed = int(rng.integers(3))
                 for c0 in range(0, len(cands), chunk):
-                    tasks.append((spec, base, cands[c0:c0 + chunk], lap_seed, starts, stint, crash_s))
+                    tasks.append((spec, base, cands[c0:c0 + chunk], lap_seed, starts, stint, crash_s,
+                                  (noise["act"], noise["obs"], gen)))
             tg = time.time()
             res = pool.map(_episodes, tasks)
             t_eps = time.time() - tg
             per_track = len(cands) // chunk + (1 if len(cands) % chunk else 0)
             f = np.zeros(len(cands))
+            res_f = [[fv for fv, _ in r] for r in res]
+            surv = float(np.mean([sv for r in res for _, sv in r]))
             for ti in range(len(prep)):
-                fit = np.concatenate(res[ti * per_track:(ti + 1) * per_track])
+                fit = np.concatenate(res_f[ti * per_track:(ti + 1) * per_track])
                 # Rank within each circuit, so a fast circuit does not outweigh a slow one.
                 r = np.empty(len(fit))
                 r[np.argsort(fit)] = np.arange(len(fit))
                 f += r / (len(fit) - 1) - 0.5
             f /= len(prep)
-            raw = np.mean([np.concatenate(res[ti * per_track:(ti + 1) * per_track]) for ti in range(len(prep))], 0)
+            raw = np.mean([np.concatenate(res_f[ti * per_track:(ti + 1) * per_track]) for ti in range(len(prep))], 0)
             ranks = np.empty(len(f))
             ranks[np.argsort(f)] = np.arange(len(f))
             u = ranks / (len(f) - 1) - 0.5
@@ -185,10 +209,14 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
             step[frozen] = 0.0
             x = x + step
             print(f"gen {gen:4d}  {(time.time() - t0) / 60:6.1f} min  progress rate mean {raw.mean():6.2f} max {raw.max():6.2f} m/s "
-                  f"over {len(prep)} circuits  (prep {t_prep:.0f} s, driving {t_eps:.0f} s)", flush=True)
+                  f"over {len(prep)} circuits, stints survived {surv:4.0%} at noise act {noise['act']:.3f} obs {noise['obs']:.3f}  "
+                  f"(prep {t_prep:.0f} s, driving {t_eps:.0f} s)", flush=True)
+            # Curriculum, as in explore.py: once most noisy stints survive, make the mistakes bigger.
+            if surv >= survive and (noise["act"] or noise["obs"]):
+                noise = {k: min(noise_max, v_ * noise_up) for k, v_ in noise.items()}
             if eval_every > 0 and gen % eval_every == 0:
                 held_out(x, f"gen {gen}")
-                state_file.write_bytes(pickle.dumps({"x": x, "m": m, "v": v, "gen": gen, "best": best, "rng": rng}))
+                state_file.write_bytes(pickle.dumps({"x": x, "m": m, "v": v, "gen": gen, "best": best, "rng": rng, "noise": noise}))
     print(f"\nBest held-out completion {best:.1%}: {out}", flush=True)
 
 
@@ -208,13 +236,19 @@ def main() -> None:
     ap.add_argument("--stint", type=int, default=400)
     ap.add_argument("--crash-s", type=float, default=5.0)
     ap.add_argument("--eval-every", type=int, default=5)
+    ap.add_argument("--act-noise", type=float, default=0.0, help="drifting action error in the stints (starting level)")
+    ap.add_argument("--obs-noise", type=float, default=0.0, help="observation noise in the stints (starting level)")
+    ap.add_argument("--noise-max", type=float, default=0.1)
+    ap.add_argument("--noise-up", type=float, default=1.2, help="noise multiplier once enough stints survive")
+    ap.add_argument("--survive", type=float, default=0.8, help="share of surviving stints that raises the noise")
     ap.add_argument("--chunk", type=int, default=8, help="candidates per task")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--fresh", action="store_true")
     a = ap.parse_args()
     run(a.init, a.name, a.generations, a.pairs, a.sigma, a.lr, a.gen_tracks, a.slow_tracks, a.real_tracks, a.stints,
-        a.stint, a.crash_s, a.eval_every, a.chunk, a.workers, a.seed, a.fresh, a.mix_tracks)
+        a.stint, a.crash_s, a.eval_every, a.chunk, a.workers, a.seed, a.fresh, a.mix_tracks,
+        a.act_noise, a.obs_noise, a.noise_max, a.noise_up, a.survive)
 
 
 if __name__ == "__main__":
