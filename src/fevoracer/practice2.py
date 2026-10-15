@@ -48,6 +48,12 @@ CHECKPOINTS = (0, 20, 100, 500, 2000)
 OUT = WINNERS / "practice2"
 
 
+def pace_rank(laps: list[tuple[str, int, float]]) -> tuple:
+    """For unlock < 3: more finished starts first, then the mean time of the starts that finish."""
+    fin = [s for st, s, _ in laps if st == "finished"]
+    return (len(fin), -(sum(fin) / len(fin)) if fin else -1e9, float(np.mean([c for _, _, c in laps])))
+
+
 def own_lap(sim: fevo.Simulator, mlp: dict, seed: int) -> tuple[np.ndarray, np.ndarray, str, int]:
     """Drive one official start step by step, recording what the driver saw and did."""
     sim.load_program(fevo.from_json(json.dumps(mlp)))
@@ -63,7 +69,12 @@ def own_lap(sim: fevo.Simulator, mlp: dict, seed: int) -> tuple[np.ndarray, np.n
 
 
 def practise(args: tuple) -> dict:
-    (spec, pairs, pace_pairs, sigma, lr, stints, stint, crash_s, budget, imitate_every, imitate_steps, seed) = args
+    (spec, pairs, pace_pairs, sigma, lr, stints, stint, crash_s, budget, imitate_every, imitate_steps, seed, unlock,
+     out_dir) = args
+    out_dir = WINNERS / out_dir
+    # With unlock < 3 the pace phase starts with a start still crashing: candidates then drive all three starts and
+    # drivers rank by finished starts, then the mean time of those (pace_rank); otherwise practice2's rules.
+    rk = rank if unlock >= 3 else (lambda laps: pace_rank(laps) if sum(st == "finished" for st, _, _ in laps) >= unlock else (-1,) + rank(laps))
     torch.set_num_threads(1)
     torch.manual_seed(seed)
     setup_d = json.load(open(WINNERS / f"{GENERALS[0]}.json"))["setup"]
@@ -105,8 +116,8 @@ def practise(args: tuple) -> dict:
     marks = [c for c in CHECKPOINTS if 0 < c <= budget]
 
     def checkpoint(budget_laps: int) -> None:
-        OUT.mkdir(parents=True, exist_ok=True)
-        path = OUT / f"{name}-{budget_laps}.json"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"{name}-{budget_laps}.json"
         if not path.exists():
             path.write_text(json.dumps(unflatten(base, best_x)) + "\n")
         report["points"].append({"budget": budget_laps, "used": round(used, 1), "laps": best_laps})
@@ -128,7 +139,7 @@ def practise(args: tuple) -> dict:
     checkpoint(0)
     while marks:
         step_n += 1
-        lapped = rank(best_laps)[0] == 3
+        lapped = rank(best_laps)[0] >= unlock
         if not lapped:
             # Phase 1: survival practice, as practice.py.
             starts = [(int(rng.integers(n)), float(rng.uniform(-2.0, 2.0)), float(rng.uniform(-0.05, 0.05)),
@@ -149,6 +160,48 @@ def practise(args: tuple) -> dict:
                 m, v = np.zeros_like(x), np.zeros_like(x)
             # Phase 2: pace. Same official start for every candidate; lap time, a crash ranks last.
             seed = int(rng.integers(3))
+            if unlock < 3:
+                e = rng.standard_normal((pace_pairs, len(x)))
+                e[:, frozen] = 0.0
+                cs = [x + sigma * k for k in e] + [x - sigma * k for k in e]
+                fits, best_c = [], None
+                for c in cs:
+                    laps_c, metres = official(sim, unflatten(base, c))
+                    used += metres / n
+                    pr = pace_rank(laps_c)
+                    fits.append(pr[0] * 1e7 + (pr[1] if pr[0] else 0) + pr[2])
+                    if rk(laps_c) > rk(best_laps) and (best_c is None or rk(laps_c) > rk(best_c[1])):
+                        best_c = (c, laps_c)
+                adam(grad(np.array(fits), e, pace_pairs))
+                if best_c is not None:
+                    best_x, best_laps = best_c[0].copy(), best_c[1]
+                if imitate_every and step_n % imitate_every == 0:
+                    # Self-imitation on the best driver's fastest clean start.
+                    fin = [(s_, i) for i, (st_, s_, _) in enumerate(best_laps) if st_ == "finished"]
+                    if fin:
+                        xs, ys, st, _ = own_lap(sim, unflatten(base, best_x), min(fin)[1])
+                        used += 1.0
+                        if st == "finished":
+                            stu = Student.from_mlp(unflatten(base, x))
+                            fit(stu, xs, ys, imitate_steps, 3e-4, 4.0, batch=256)
+                            general._hold_mask(stu)
+                            x_im = flatten(stu.to_mlp(setup_d))
+                            x_im[frozen] = 0.0
+                            laps_im, metres = official(sim, unflatten(base, x_im))
+                            used += metres / n
+                            report["imitation"][1] += 1
+                            if rk(laps_im) >= rk(mean_laps):
+                                x = x_im
+                                report["imitation"][0] += 1
+                mean_laps, metres = official(sim, unflatten(base, x))
+                used += metres / n
+                if rk(mean_laps) > rk(best_laps):
+                    best_x, best_laps = x.copy(), mean_laps
+                if report.get("three") is None and sum(st_ == "finished" for st_, _, _ in best_laps) == 3:
+                    report["three"] = round(used, 1)
+                while marks and used >= marks[0]:
+                    checkpoint(marks.pop(0))
+                continue
             e = rng.standard_normal((pace_pairs, len(x)))
             e[:, frozen] = 0.0
             cs = [x + sigma * k for k in e] + [x - sigma * k for k in e]
@@ -187,7 +240,7 @@ def practise(args: tuple) -> dict:
                         report["imitation"][0] += 1
         mean_laps, metres = official(sim, unflatten(base, x))
         used += metres / n
-        if rank(mean_laps) > rank(best_laps):
+        if rk(mean_laps) > rk(best_laps):
             best_x, best_laps = x.copy(), mean_laps
         while marks and used >= marks[0]:
             checkpoint(marks.pop(0))
@@ -208,22 +261,28 @@ def main() -> None:
     ap.add_argument("--budget", type=int, default=2000)
     ap.add_argument("--imitate-every", type=int, default=5)
     ap.add_argument("--imitate-steps", type=int, default=300)
+    ap.add_argument("--unlock", type=int, default=3, help="official starts lapped before the pace phase starts")
+    ap.add_argument("--out", default="practice2", help="winners/<out>/")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     specs = a.tracks.split(",")
+    # Each circuit keeps the seed it has in the default list, so its survival practice matches earlier runs.
+    idx = [TRACKS.index(s) if s in TRACKS else 100 + k for k, s in enumerate(specs)]
     with mp.get_context("spawn").Pool(a.workers or min(len(specs), max(1, (os.cpu_count() or 2) - 1))) as pool:
         reps = pool.map(practise, [(s, a.pairs, a.pace_pairs, a.sigma, a.lr, a.stints, a.stint, a.crash_s, a.budget,
-                                    a.imitate_every, a.imitate_steps, a.seed + i) for i, s in enumerate(specs)])
+                                    a.imitate_every, a.imitate_steps, a.seed + i, a.unlock, a.out)
+                                   for i, s in zip(idx, specs)])
     print(f"{'circuit':<12} {'start driver':<28} " + "  ".join(f"{c:>22}" for c in CHECKPOINTS if c <= a.budget) + "  expert")
     for rp in reps:
         cells = [f"{fmt(p['laps'], rp['expert']):>22}" for p in rp["points"]]
         print(f"{rp['track']:<12} {rp['start']:<28} " + "  ".join(cells)
               + f"  {fevo.format_lap_time(rp['expert']) if rp['expert'] else 'fails'}"
               + f"   (pace from {rp['pace_from']} laps; imitation kept {rp['imitation'][0]}/{rp['imitation'][1]}; "
-              f"{rp['steps']} steps, {rp['minutes']} min)", flush=True)
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "report.json").write_text(json.dumps(reps, indent=1) + "\n")
+              f"{rp['steps']} steps, {rp['minutes']} min; all three starts from {rp.get('three')} laps)", flush=True)
+    out = WINNERS / a.out
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "report.json").write_text(json.dumps(reps, indent=1) + "\n")
 
 
 if __name__ == "__main__":
