@@ -96,10 +96,11 @@ def rollout(sim: fevo.Simulator, expert: LineExpert, student: Student | None, st
 
 
 def fit(student: Student, X: np.ndarray, Y: np.ndarray, steps: int, lr: float, steer_weight: float, batch: int = 1024,
-        sample_weight: np.ndarray | None = None) -> float:
+        sample_weight: np.ndarray | None = None, drop_cols: tuple[int, ...] = (), drop_p: float = 0.0) -> float:
     """`steps` minibatch updates (Adam, learning rate decayed tenfold by the end); returns the full-data loss.
 
-    sample_weight draws states in proportion to it (e.g. more braking zones) instead of uniformly."""
+    sample_weight draws states in proportion to it (e.g. more braking zones) instead of uniformly. drop_cols are zeroed
+    together in a drop_p share of each minibatch's states (dropout on inputs the network should not lean on alone)."""
     opt = torch.optim.Adam(student.parameters(), lr=lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps, eta_min=lr / 10)
     Xt, Yt = torch.as_tensor(X), torch.as_tensor(Y)
@@ -107,7 +108,12 @@ def fit(student: Student, X: np.ndarray, Y: np.ndarray, steps: int, lr: float, s
     sw = None if sample_weight is None else torch.as_tensor(sample_weight, dtype=torch.float32)
     for _ in range(steps):
         i = torch.randint(len(Xt), (batch,)) if sw is None else torch.multinomial(sw, batch, replacement=True)
-        loss = ((student(Xt[i]) - Yt[i]).pow(2) * w).mean()
+        xb = Xt[i]
+        if drop_cols and drop_p > 0:
+            xb = xb.clone()
+            gone = torch.rand(batch) < drop_p
+            xb[gone.nonzero().unsqueeze(1), torch.tensor(drop_cols)] = 0.0
+        loss = ((student(xb) - Yt[i]).pow(2) * w).mean()
         opt.zero_grad()
         loss.backward()
         opt.step()

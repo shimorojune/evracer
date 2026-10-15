@@ -138,7 +138,7 @@ def _mask(obs: list[float]) -> list[float]:
 
 def _rollouts(args: tuple) -> tuple[np.ndarray, np.ndarray, dict]:
     """One track: a lap from a random official start plus practice stints, mixing expert and student driving."""
-    spec, student_mlp, beta, practice, stint, seed, brake_starts, expert_share = args
+    spec, student_mlp, beta, practice, stint, seed, brake_starts, expert_share, act_noise = args
     rng = np.random.default_rng(seed)
     tr, ex, kw = _expert_for(spec)
     sim = _SIM
@@ -170,6 +170,7 @@ def _rollouts(args: tuple) -> tuple[np.ndarray, np.ndarray, dict]:
         status = "running"
         # Some runs are the expert's from start to finish, so whole braking zones get driven and labelled to the end.
         b = 1.0 if rng.random() < expert_share else beta
+        drift = np.zeros(2)
         for _ in range(st_["steps"]):
             a_exp = ex(sim, obs)
             xs.append(_mask(obs))
@@ -178,6 +179,11 @@ def _rollouts(args: tuple) -> tuple[np.ndarray, np.ndarray, dict]:
                 a = sim.evaluate_program(obs)
             else:
                 a = a_exp
+            if act_noise:
+                # A slowly drifting error on the applied action: states off the clean line, and with memory inputs
+                # (solo-6) a last action that is not simply the label, so repeating it is not the answer.
+                drift = 0.9 * drift + rng.normal(0.0, act_noise * 0.436, 2)
+                a = (a[0] + drift[0], a[1] + drift[1])
             status = sim.step(float(np.clip(a[0], -1, 1)), float(np.clip(a[1], -1, 1)))
             obs = sim.observation()
             if status != "running":
@@ -259,13 +265,14 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
           steps: int, lr: float, workers: int | None, seed: int, setup_from: str, init: str | None = None,
           start_round: int = 0, brake_weight: float = 1.0, brake_starts: float = 0.0, expert_share: float = 0.0,
           seed_rounds: int = 0, data: str | None = None, slow_share: float = 0.0, data_last: int = 0,
-          mix_share: float = 0.0, no_ramp: bool = False) -> None:
+          mix_share: float = 0.0, no_ramp: bool = False, act_noise: float = 0.0, prev_dropout: float = 0.0) -> None:
     if no_ramp:
         EXPERT.pop("onset_ramp", None)
         CAUTIOUS.pop("onset_ramp", None)
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     rules = fevo.load_rules(RULES)
+    prev_cols = tuple(i for i, n in enumerate(rules.observation) if n.startswith("prev_"))
     setup_d = json.load(open(setup_from))["setup"]
     setup = [setup_d[k["id"]] for k in rules.setup]
     if init:
@@ -289,7 +296,8 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
     t0 = time.time()
     print(f"General driver on {RULES}: student {[len(rules.observation), *hidden, 2]} with inputs {MASKED} masked, braking/corner-entry "
           f"states drawn x{brake_weight}, {brake_starts:.0%} of practice stints start before a braking zone, {expert_share:.0%} of runs all expert, {seed_rounds} expert-only seed rounds, data kept across rounds; per round {gen_per_round} new "
-          f"generated ({slow_share:.0%} with hairpins and sidesteps) + {real_per_round} of {len(real_train)} real training circuits; held out {held}", flush=True)
+          f"generated ({slow_share:.0%} with hairpins and sidesteps) + {real_per_round} of {len(real_train)} real training circuits; "
+          f"applied-action noise {act_noise}, inputs {prev_cols} dropped in {prev_dropout:.0%} of fitted states; held out {held}", flush=True)
     with mp.get_context("spawn").Pool(workers, initializer=_init, initargs=(setup, no_ramp)) as pool:
         base = pool.map(_official, [(h, None, True) for h in held])
         expert_laps = {r["track"]: r["expert"] for r in base}
@@ -315,7 +323,7 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
                      + [f"mix:{int(s)}" for s in rng.integers(1, 800_000, n_mix)]
                      + list(rng.choice(real_train, real_per_round, replace=False)))
             mlp = None if r == 0 else student.to_mlp(setup_d)
-            res = pool.map(_rollouts, [(s, mlp, beta, practice, stint, int(rng.integers(1 << 30)), brake_starts, expert_share) for s in specs])
+            res = pool.map(_rollouts, [(s, mlp, beta, practice, stint, int(rng.integers(1 << 30)), brake_starts, expert_share, act_noise) for s in specs])
             for xs, ys, _ in res:
                 X.append(xs)
                 Y.append(ys)
@@ -324,7 +332,8 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
                 X.pop(0)
                 Y.pop(0)
             Xa, Ya = np.concatenate(X), np.concatenate(Y)
-            loss = fit(student, Xa, Ya, steps, lr, 4.0, sample_weight=weights(Xa, Ya, brake_weight) if brake_weight != 1.0 else None)
+            loss = fit(student, Xa, Ya, steps, lr, 4.0, sample_weight=weights(Xa, Ya, brake_weight) if brake_weight != 1.0 else None,
+                       drop_cols=prev_cols, drop_p=prev_dropout)
             _hold_mask(student)
             # The averaged driver: an exponential moving average of the networks each round trains (it starts as the
             # first one). It is scored beside the newly trained network; whichever scores best is kept.
@@ -377,11 +386,13 @@ def main() -> None:
     ap.add_argument("--no-ramp", action="store_true", help="the expert brakes on a switch, not the onset ramp")
     ap.add_argument("--data-last", type=int, default=0, help="with --data, keep only the most recent N states")
     ap.add_argument("--data", help="start with the kept states a previous run saved (checkpoints/<name>-data.npz)")
+    ap.add_argument("--act-noise", type=float, default=0.0, help="drifting error on the applied action while collecting data")
+    ap.add_argument("--prev-dropout", type=float, default=0.0, help="share of fitted states with the prev_* inputs zeroed (solo-6)")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     train(a.name, a.rounds, a.gen, a.real, a.practice, a.stint, [int(h) for h in a.hidden.split(",")], a.steps, a.lr,
-          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds, a.data, a.slow_share, a.data_last, a.mix_share, a.no_ramp)
+          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds, a.data, a.slow_share, a.data_last, a.mix_share, a.no_ramp, a.act_noise, a.prev_dropout)
 
 
 if __name__ == "__main__":
