@@ -17,7 +17,9 @@ corners (where it starts braking, its apex, where it is back on the power). Each
 in small steps (3 m, 0.02 of steering lock, 5 m); a change is kept if the lap is clean and that corner's stretch
 got quicker, otherwise it is put back and that note's step is halved. When every step is spent the steps are
 refilled at half size, so practice keeps probing other corners instead of stopping. A crash at a corner whose
-notes were not changed that lap moves its braking point 3 m earlier.
+notes were not changed that lap moves its braking point 3 m earlier; stopping short of a corner (too slow to
+carry on) moves it 3 m later. While no lap is clean, a change that gets the car further round counts as better, and
+braking and line notes are tried both ways. reprobe() starts the tries again after the car changes.
 
     uv run python -m fevoracer.notebook2
 """
@@ -43,6 +45,7 @@ from .racer import LineExpert
 
 REAR_SLIDE, FRONT_SLIDE, MARGIN_L, MARGIN_R = 18, 19, 21, 22
 KINDS = {"brake": 3.0, "line": 0.02, "exit": 5.0}
+EASE_EVERY = 4  # every 4th lap eases one note back towards the driver's own instinct
 MIN_STEP = {"brake": 0.5, "line": 0.004, "exit": 1.0}
 
 
@@ -145,8 +148,10 @@ class Practice:
         self.nb, self.rng, self.crash_m = nb, rng, crash_m
         k = len(nb.points)
         self.step = {kind: np.full(k, s) for kind, s in KINDS.items()}
-        self.sign = {"line": self.rng.choice([-1.0, 1.0], k)}
+        self.sign = {"line": self.rng.choice([-1.0, 1.0], k), "brake": np.ones(k), "exit": np.ones(k)}
         self.best = np.full(k, np.inf)
+        self.reach = 0.0  # how far round the best unfinished lap since the last clean one got (1.0 once clean)
+        self.laps = 0
         self.trial: tuple[str, int, float] | None = None
         self.kept = {kind: 0 for kind in KINDS}
         self.refills = 0
@@ -162,6 +167,16 @@ class Practice:
             self.best[z] = min(self.best[z], self.zone_time(lap, z))
 
     def plan(self) -> None:
+        self.laps += 1
+        noted = [(kind, z) for kind in KINDS for z in range(len(self.nb.points)) if abs(self.nb.notes[kind][z]) >= MIN_STEP[kind]]
+        if noted and self.laps % EASE_EVERY == 0:
+            # Every few laps, ease one note back towards the driver's own instinct; it stays eased unless that is worse,
+            # so caution learned for other conditions can wear off.
+            kind, z = noted[int(self.rng.integers(len(noted)))]
+            before = self.nb.notes[kind][z]
+            self.nb.notes[kind][z] = before - np.sign(before) * min(abs(before), max(KINDS[kind], 0.3 * abs(before)))
+            self.trial = (kind, z, before, True)
+            return
         cands = [(self.step[kind][z] / KINDS[kind], self.rng.random(), kind, z)
                  for kind in KINDS for z in range(len(self.nb.points)) if self.step[kind][z] >= MIN_STEP[kind]]
         if not cands:
@@ -172,23 +187,40 @@ class Practice:
             return self.plan()
         _, _, kind, z = max(cands)
         before = self.nb.notes[kind][z]
-        delta = self.step[kind][z] * (self.sign["line"][z] if kind == "line" else 1.0)
+        delta = self.step[kind][z] * self.sign[kind][z]
         self.nb.notes[kind][z] = before + delta
-        self.trial = (kind, z, before)
+        self.trial = (kind, z, before, False)
+
+    def reprobe(self) -> None:
+        """Conditions changed (e.g. the car): forget what the old laps proved and try every note again, both ways."""
+        for kind in KINDS:
+            self.step[kind][:] = KINDS[kind]
+        self.best[:] = np.inf
+        self.reach = 0.0
+        self.refills = 0
 
     def judge(self, lap: dict) -> None:
         clean = lap["status"] == "finished"
+        reach = 1.0 if clean else min(0.999, lap["point"] / self.nb.n)
         if self.trial:
-            kind, z, before = self.trial
+            kind, z, before, easing = self.trial
             t = self.zone_time(lap, z)
-            if clean and t < self.best[z] - 0.5:
-                self.best[z] = t
+            # Better is a quicker clean lap through that corner, or, while no lap is clean, getting further round.
+            # An eased note only has to be no worse: as quick (within 0.5 steps) when clean, as far round when not.
+            if easing:
+                better = (clean and t <= self.best[z] + 0.5) or (not clean and reach >= self.reach - 0.002)
+            else:
+                better = (clean and t < self.best[z] - 0.5) or (not clean and reach > self.reach + 0.002)
+            if better:
+                self.best[z] = min(self.best[z], t) if clean else self.best[z]
                 self.kept[kind] += 1
+            elif easing:
+                self.nb.notes[kind][z] = before
             else:
                 self.nb.notes[kind][z] = before
                 self.step[kind][z] *= 0.5
-                if kind == "line":
-                    self.sign["line"][z] *= -1  # that side did not help: try the other side next
+                if kind != "exit":
+                    self.sign[kind][z] *= -1  # that way did not help: try the other way next
         if clean:
             for z in range(len(self.nb.points)):
                 if not self.trial or z != self.trial[1]:
@@ -196,7 +228,13 @@ class Practice:
         else:
             z = self.nb.zone_of(lap["point"] % self.nb.n)
             if not self.trial or z != self.trial[1]:
-                self.nb.notes["brake"][z] -= self.crash_m
+                if lap["status"] == "crashed":
+                    self.nb.notes["brake"][z] -= self.crash_m  # went off: brake earlier there
+                else:
+                    # Stopped short of it: I am braking too early there. Undo a good share of any earlier braking at once.
+                    b = self.nb.notes["brake"][z]
+                    self.nb.notes["brake"][z] += max(self.crash_m, 0.3 * -b) if b < 0 else self.crash_m
+        self.reach = 1.0 if clean else max(self.reach, reach)
 
 
 def learn(args: tuple) -> dict:

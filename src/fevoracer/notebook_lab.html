@@ -85,7 +85,7 @@
     <div class="panel">
       <h2>Lap time by lap (this session, this track)</h2>
       <canvas id="curve"></canvas>
-      <div class="hint">Each dot is a lap: filled with notes, hollow with notes off; a cross marks a crash. With "Keep learning" on, every lap tries one note at one corner (3 m later braking, 0.02 lock of line, 5 m earlier power) and keeps it only if the lap was clean and that corner got quicker, as the Python notebook does.</div>
+      <div class="hint">Each dot is a lap: filled with notes, hollow with notes off; a cross marks a crash. With "Keep learning" on, every lap tries one note at one corner (3 m of braking point either way, 0.02 lock of line, 5 m earlier power) and keeps it if that corner got quicker on a clean lap, or, while no lap is clean, if the car got further round. Going off moves that corner's braking point earlier; stopping short of it moves it later. Changing the car makes it re-check every note, as the Python notebook does.</div>
     </div>
     <div class="panel">
       <h2>Laps this session</h2>
@@ -216,30 +216,57 @@ function readable(i) {
 function makePractice() {
   const k = NB.points.length;
   return { step: Object.fromEntries(Object.entries(KINDS).map(([kind, s]) => [kind, Array(k).fill(s)])),
-           sign: Array.from({ length: k }, () => (Math.random() < 0.5 ? -1 : 1)), best: Array(k).fill(Infinity), trial: null, refills: 0, kept: 0 };
+           sign: { line: Array.from({ length: k }, () => (Math.random() < 0.5 ? -1 : 1)), brake: Array(k).fill(1), exit: Array(k).fill(1) },
+           best: Array(k).fill(Infinity), reach: 0, trial: null, refills: 0, kept: 0, laps: 0 };
 }
 function zoneTime(at, z) {
   const a = mod(NB.points[z] - LEAD, n), span = mod(NB.points[(z + 1) % NB.points.length] - NB.points[z], n) || n;
   let t = 0; for (let i = 0; i < span; i++) t += at[(a + i) % n]; return t;
 }
+const EASE_EVERY = 4;
 function plan() {
+  PR.laps++;
+  const noted = [];
+  for (const kind of Object.keys(KINDS)) for (let z = 0; z < NB.points.length; z++) if (Math.abs(NB.notes[kind][z]) >= MIN_STEP[kind]) noted.push([kind, z]);
+  if (noted.length && PR.laps % EASE_EVERY === 0) {
+    // Every few laps, ease one note back towards the driver's own instinct; it stays eased unless that is worse.
+    const [kind, z] = noted[Math.floor(Math.random() * noted.length)], before = NB.notes[kind][z];
+    NB.notes[kind][z] = before - Math.sign(before) * Math.min(Math.abs(before), Math.max(KINDS[kind], 0.3 * Math.abs(before)));
+    PR.trial = { kind, z, before, easing: true };
+    return;
+  }
   const c = [];
   for (const kind of Object.keys(KINDS)) for (let z = 0; z < NB.points.length; z++) if (PR.step[kind][z] >= MIN_STEP[kind]) c.push([PR.step[kind][z] / KINDS[kind], Math.random(), kind, z]);
   if (!c.length) { PR.refills++; for (const kind of Object.keys(KINDS)) PR.step[kind].fill(KINDS[kind] / 2 ** PR.refills); return plan(); }
   c.sort((a, b) => b[0] - a[0] || b[1] - a[1]);
   const [, , kind, z] = c[0], before = NB.notes[kind][z];
-  NB.notes[kind][z] = before + PR.step[kind][z] * (kind === "line" ? PR.sign[z] : 1);
-  PR.trial = { kind, z, before };
+  NB.notes[kind][z] = before + PR.step[kind][z] * PR.sign[kind][z];
+  PR.trial = { kind, z, before, easing: false };
 }
+/** Conditions changed (the car): forget what the old laps proved and try every note again, both ways. */
+function reprobe() { for (const kind of Object.keys(KINDS)) PR.step[kind].fill(KINDS[kind]); PR.best.fill(Infinity); PR.reach = 0; PR.refills = 0; }
 function judge(lap) {
-  const clean = lap.status === "finished";
+  const clean = lap.status === "finished", reach = clean ? 1 : Math.min(0.999, lap.point / n);
   if (PR.trial) {
-    const { kind, z, before } = PR.trial, t = zoneTime(lap.at, z);
-    if (clean && t < PR.best[z] - 0.5) { PR.best[z] = t; PR.kept++; }
-    else { NB.notes[kind][z] = before; PR.step[kind][z] *= 0.5; if (kind === "line") PR.sign[z] *= -1; }
+    const { kind, z, before, easing } = PR.trial, t = zoneTime(lap.at, z);
+    // Better is a quicker clean lap through that corner, or, while no lap is clean, getting further round.
+    // An eased note only has to be no worse.
+    const better = easing ? (clean && t <= PR.best[z] + 0.5) || (!clean && reach >= PR.reach - 0.002)
+                          : (clean && t < PR.best[z] - 0.5) || (!clean && reach > PR.reach + 0.002);
+    if (better) { if (clean) PR.best[z] = Math.min(PR.best[z], t); PR.kept++; }
+    else if (easing) NB.notes[kind][z] = before;
+    else { NB.notes[kind][z] = before; PR.step[kind][z] *= 0.5; if (kind !== "exit") PR.sign[kind][z] *= -1; }
   }
   if (clean) { for (let z = 0; z < NB.points.length; z++) if (!PR.trial || z !== PR.trial.z) PR.best[z] = Math.min(PR.best[z], zoneTime(lap.at, z)); }
-  else { const z = zoneOf(mod(lap.point, n)); if (!PR.trial || z !== PR.trial.z) NB.notes.brake[z] -= 3.0; }
+  else {
+    const z = zoneOf(mod(lap.point, n));
+    // Went off: brake earlier there. Stopped short of it (too slow to carry on): I am braking too early there.
+    if (!PR.trial || z !== PR.trial.z) {
+      const b = NB.notes.brake[z];
+      NB.notes.brake[z] += lap.status === "crashed" ? -3.0 : b < 0 ? Math.max(3.0, 0.3 * -b) : 3.0;  // stopped short: undo a good share of earlier braking
+    }
+  }
+  PR.reach = clean ? 1 : Math.max(PR.reach, reach);
   PR.trial = null;
 }
 
@@ -334,7 +361,7 @@ function renderSliders() {
     div.className = "slider" + (Math.abs(val - stock) > 1e-9 ? " changed" : "");
     div.innerHTML = `<label><span>${s.label}</span><b></b></label><input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${pos}" aria-label="${s.label}"><div class="sub">${s.sub}</div>`;
     div.querySelector("input").addEventListener("input", (e) => { const v = Number(e.target.value);
-      aero[s.key] = Math.abs((s.rel ? v * stock : v) - stock) <= (s.rel ? s.step * stock : s.step) / 2 ? stock : s.rel ? v * stock : v; applyCar(); syncSliders(); });
+      aero[s.key] = Math.abs((s.rel ? v * stock : v) - stock) <= (s.rel ? s.step * stock : s.step) / 2 ? stock : s.rel ? v * stock : v; applyCar(); syncSliders(); reprobe(); });
     $("sliders").appendChild(div);
   }
   syncSliders();
@@ -460,7 +487,7 @@ boot().then(() => {
   $("useNotes").onchange = () => restart();
   $("learn").onchange = () => restart();
   $("fresh").onclick = () => { for (const k of Object.keys(NB.notes)) NB.notes[k].fill(0); PR = makePractice(); renderNotes(); restart(); };
-  $("stock").onclick = () => { Object.assign(aero, { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront }); applyCar(); syncSliders(); };
+  $("stock").onclick = () => { Object.assign(aero, { downforceAreaM2: STOCK.downforceAreaM2, dragAreaM2: STOCK.dragAreaM2, aeroBalanceFront: STOCK.aeroBalanceFront }); applyCar(); syncSliders(); reprobe(); };
   addEventListener("keydown", (e) => { if (e.key === " " && e.target === document.body) { e.preventDefault(); $("play").click(); } if (e.key === "r") restart(); });
   window.__nb = { DATA, runLapNow, selectTrack, item: () => ITEM, notes: () => NB, state: () => state };
   requestAnimationFrame((t) => { last = t; tick(t); });
