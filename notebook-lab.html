@@ -387,7 +387,38 @@ function renderNotes() {
   $("notes").innerHTML = NB.points.map((p, i) => `<li data-i="${i}"><span class="km">${(p / 1000).toFixed(2)} km</span>${readable(i)}</li>`).join("");
 }
 
-// ---------- drawing ----------
+// ---------- drawing (the car sprite as the aero lab and replay viewer) ----------
+const LOCK = "#8fd0ff", SPIN = "#ff8a3d";
+const WHEELS = { front: [[1.6, 0.74], [1.6, -0.74]], rear: [[-1.75, 0.74], [-1.75, -0.74]] };
+function drawCar(ctx, colors, ts) {
+  const Lh = R.car.length / 2, Wh = R.car.width / 2;
+  if (ts.f > 0 || ts.r > 0) {
+    for (const [axle, k] of [["front", ts.f], ["rear", ts.r]]) {
+      if (k <= 0) continue;
+      for (const [wx, wy] of WHEELS[axle]) for (let j = 1; j <= 4; j++) {
+        ctx.beginPath(); ctx.arc(wx - j * 0.7, wy, 0.35 + 0.25 * j * k, 0, 2 * Math.PI);
+        ctx.fillStyle = `rgba(235,240,245,${(0.35 * k / j).toFixed(3)})`; ctx.fill();
+      }
+    }
+  }
+  for (const [x0, x1, axle] of [[-2.15, -1.35, "rear"], [1.25, 1.95, "front"]]) for (const s of [-1, 1]) {
+    const k = axle === "front" ? ts.f : ts.r;
+    ctx.fillStyle = k > 0 ? (axle === "front" ? LOCK : ts.rearColor) : "#111";
+    ctx.fillRect(x0, s > 0 ? Wh - 0.42 : -Wh, x1 - x0, 0.42);
+  }
+  ctx.fillStyle = colors.secondary;
+  ctx.fillRect(-Lh, -0.78, 0.38, 1.56); ctx.fillRect(Lh - 0.32, -Wh + 0.05, 0.32, 2 * Wh - 0.1);
+  ctx.fillStyle = colors.primary;
+  ctx.beginPath();
+  const pts = [[Lh - 0.2, 0.1], [1.3, 0.2], [0.7, 0.42], [-0.2, 0.62], [-1.2, 0.55], [-2.25, 0.28]];
+  ctx.moveTo(Lh - 0.05, 0);
+  for (const [x, y] of pts) ctx.lineTo(x, y);
+  for (const [x, y] of pts.slice().reverse()) ctx.lineTo(x, -y);
+  ctx.closePath(); ctx.fill();
+  ctx.lineWidth = 0.07; ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.stroke();
+  ctx.fillStyle = colors.accent; ctx.fillRect(-1.6, -0.08, 3.4, 0.16);
+  ctx.fillStyle = "#0b0b0b"; ctx.beginPath(); ctx.ellipse(0.2, 0, 0.42, 0.24, 0, 0, 2 * Math.PI); ctx.fill();
+}
 function fit(cv) { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; if (cv.width !== Math.round(r.width * d) || cv.height !== Math.round(r.height * d)) { cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); } return d; }
 const noteColour = (i) => (NB.notes.brake[i] > 0.5 ? css("--note-later") : NB.notes.brake[i] < -0.5 ? css("--note-earlier") : NB.notes.line[i] || NB.notes.exit[i] ? css("--note-other") : css("--muted"));
 function marker(ctx, i, r, lw) {
@@ -406,8 +437,7 @@ function drawMain() {
   if (state.notes) for (let i = 0; i < NB.points.length; i++) marker(ctx, i, 9, 0.6);
   ctx.beginPath(); trail.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.strokeStyle = css("--trail"); ctx.lineWidth = 0.35; ctx.stroke();
   ctx.save(); ctx.translate(state.x, state.y); ctx.rotate(state.yaw);
-  ctx.fillStyle = DATA.colors.primary; ctx.fillRect(-R.car.length / 2, -R.car.width / 2, R.car.length, R.car.width);
-  ctx.fillStyle = DATA.colors.accent; ctx.fillRect(-1.6, -0.08, 3.4, 0.16); ctx.restore();
+  drawCar(ctx, DATA.colors, { f: state.fs, r: state.rs, rearColor: state.thr < 0 ? LOCK : SPIN }); ctx.restore();
   ctx.setTransform(d, 0, 0, d, 0, 0);
   if (state.status !== "running") { ctx.font = "600 22px system-ui"; ctx.fillStyle = state.status === "finished" ? css("--ok") : css("--warn"); ctx.fillText(state.status === "finished" ? `Finished ${fmtTime(state.steps)}` : `${state.status.toUpperCase()} at gate ${state.gates}`, 16, 34); }
 }
