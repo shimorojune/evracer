@@ -1,0 +1,100 @@
+General ES on solo-6: 32642 numbers (384 frozen), 48 candidates a generation, sigma 0.003, lr 0.0003; each generation 2 generated + 2 slow-corner + 3 mixed + 2 real training circuits, a lap and 4 braking-zone stints of 400 steps on each, crash +5.0 s; held-out scoring every 5 generations; stint noise act 0.05 obs 0.0 (x1.15 when 60% of stints survive, up to 0.1), the official-start lap with the same action error; held-out pick by clean laps + laps under action error 0.06
+   held out (start): g900000 1:15.03  g900001 1:03.62  g900002 1:27.90  g900004 1:24.28  g900005 0:58.07  g900006 0/5 (17%)  g900007 1:23.95  g900008 1:04.78  austin 1:59.30  montreal 1:27.90  monza 0/5 (16%)  spa 0/5 (18%)  spielberg 1:16.77  | with error 0.06: 30/65 (62%)  | completed 80.9%, laps finished 50/65  << new best
+gen    1     1.4 min  progress rate mean  46.55 max  49.09 m/s over 9 circuits, stints survived  87% at noise act 0.050 obs 0.000  (prep 3 s, driving 43 s)
+gen    2     2.0 min  progress rate mean  36.94 max  38.98 m/s over 9 circuits, stints survived  68% at noise act 0.057 obs 0.000  (prep 3 s, driving 32 s)
+gen    3     2.6 min  progress rate mean  37.48 max  40.21 m/s over 9 circuits, stints survived  61% at noise act 0.066 obs 0.000  (prep 3 s, driving 29 s)
+gen    4     3.1 min  progress rate mean  43.66 max  45.73 m/s over 9 circuits, stints survived  67% at noise act 0.076 obs 0.000  (prep 3 s, driving 30 s)
+gen    5     3.5 min  progress rate mean  33.34 max  37.13 m/s over 9 circuits, stints survived  62% at noise act 0.087 obs 0.000  (prep 2 s, driving 21 s)
+   held out (gen 5): g900000 1:14.12  g900001 1:02.93  g900002 1:27.07  g900004 1:23.27  g900005 0:57.47  g900006 1:00.22 4/5  g900007 1:23.32  g900008 1:04.32  austin 1:58.10  montreal 0/5 (90%)  monza 0/5 (16%)  spa 1/5 (35%)  spielberg 1:16.10  | with error 0.06: 24/65 (60%)  | completed 86.7%, laps finished 50/65
+gen    6     4.6 min  progress rate mean  34.92 max  38.68 m/s over 9 circuits, stints survived  55% at noise act 0.100 obs 0.000  (prep 2 s, driving 23 s)
+gen    7     5.0 min  progress rate mean  33.86 max  36.10 m/s over 9 circuits, stints survived  59% at noise act 0.100 obs 0.000  (prep 2 s, driving 22 s)
+gen    8     5.4 min  progress rate mean  33.84 max  36.66 m/s over 9 circuits, stints survived  52% at noise act 0.100 obs 0.000  (prep 3 s, driving 18 s)
+gen    9     5.8 min  progress rate mean  34.96 max  37.61 m/s over 9 circuits, stints survived  48% at noise act 0.100 obs 0.000  (prep 3 s, driving 23 s)
+gen   10     6.2 min  progress rate mean  34.01 max  36.61 m/s over 9 circuits, stints survived  50% at noise act 0.100 obs 0.000  (prep 3 s, driving 25 s)
+   held out (gen 10): g900000 1:14.30  g900001 1:02.97  g900002 1:27.18  g900004 1:23.33  g900005 0:57.45  g900006 3/5 (72%)  g900007 2/5 (61%)  g900008 1:04.33  austin 1:58.58  montreal 3/5 (96%)  monza 0/5 (16%)  spa 3/5 (74%)  spielberg 1:16.43  | with error 0.06: 33/65 (66%)  | completed 86.1%, laps finished 51/65  << new best
+gen   11     7.4 min  progress rate mean  34.75 max  36.71 m/s over 9 circuits, stints survived  66% at noise act 0.100 obs 0.000  (prep 3 s, driving 23 s)
+gen   12     7.8 min  progress rate mean  38.22 max  40.54 m/s over 9 circuits, stints survived  53% at noise act 0.100 obs 0.000  (prep 3 s, driving 23 s)
+gen   13     8.1 min  progress rate mean  34.33 max  38.06 m/s over 9 circuits, stints survived  51% at noise act 0.100 obs 0.000  (prep 2 s, driving 18 s)
+gen   14     8.6 min  progress rate mean  34.62 max  37.15 m/s over 9 circuits, stints survived  58% at noise act 0.100 obs 0.000  (prep 3 s, driving 22 s)
+gen   15     9.0 min  progress rate mean  36.85 max  39.78 m/s over 9 circuits, stints survived  63% at noise act 0.100 obs 0.000  (prep 3 s, driving 26 s)
+   held out (gen 15): g900000 1:14.80  g900001 1:02.98  g900002 3/5 (72%)  g900004 1:23.65  g900005 0:57.58  g900006 1:00.62 4/5  g900007 1:23.22  g900008 1:04.52  austin 1:59.40  montreal 1:26.97  monza 0/5 (16%)  spa 4/5 (83%)  spielberg 1:16.90  | with error 0.06: 28/65 (65%)  | completed 88.8%, laps finished 56/65  << new best
+gen   16    10.0 min  progress rate mean  35.02 max  37.78 m/s over 9 circuits, stints survived  49% at noise act 0.100 obs 0.000  (prep 3 s, driving 22 s)
+gen   17    10.4 min  progress rate mean  38.94 max  42.60 m/s over 9 circuits, stints survived  60% at noise act 0.100 obs 0.000  (prep 3 s, driving 22 s)
+gen   18    10.9 min  progress rate mean  36.38 max  39.31 m/s over 9 circuits, stints survived  63% at noise act 0.100 obs 0.000  (prep 3 s, driving 26 s)
+gen   19    11.3 min  progress rate mean  35.42 max  39.86 m/s over 9 circuits, stints survived  55% at noise act 0.100 obs 0.000  (prep 3 s, driving 21 s)
+gen   20    11.7 min  progress rate mean  40.81 max  42.99 m/s over 9 circuits, stints survived  73% at noise act 0.100 obs 0.000  (prep 3 s, driving 21 s)
+   held out (gen 20): g900000 1:14.95  g900001 1:03.38  g900002 0/5 (29%)  g900004 1:23.88  g900005 0:57.72  g900006 3/5 (66%)  g900007 1:23.28  g900008 1:04.77  austin 1:59.83  montreal 1:27.00  monza 0/5 (16%)  spa 1:57.33  spielberg 1:17.07  | with error 0.06: 30/65 (61%)  | completed 85.5%, laps finished 53/65
+gen   21    12.7 min  progress rate mean  32.35 max  33.93 m/s over 9 circuits, stints survived  48% at noise act 0.100 obs 0.000  (prep 3 s, driving 24 s)
+gen   22    13.2 min  progress rate mean  41.57 max  44.12 m/s over 9 circuits, stints survived  50% at noise act 0.100 obs 0.000  (prep 2 s, driving 23 s)
+gen   23    13.5 min  progress rate mean  36.42 max  39.54 m/s over 9 circuits, stints survived  70% at noise act 0.100 obs 0.000  (prep 3 s, driving 18 s)
+gen   24    13.9 min  progress rate mean  35.74 max  39.43 m/s over 9 circuits, stints survived  49% at noise act 0.100 obs 0.000  (prep 2 s, driving 19 s)
+gen   25    14.3 min  progress rate mean  34.68 max  36.76 m/s over 9 circuits, stints survived  55% at noise act 0.100 obs 0.000  (prep 3 s, driving 20 s)
+   held out (gen 25): g900000 1:14.98  g900001 1:03.42  g900002 4/5 (86%)  g900004 1:23.85  g900005 0:57.70  g900006 3/5 (65%)  g900007 1:23.05  g900008 1:04.83  austin 1:59.33  montreal 3/5 (96%)  monza 0/5 (16%)  spa 1:57.25  spielberg 1:17.03  | with error 0.06: 33/65 (67%)  | completed 89.5%, laps finished 55/65  << new best
+gen   26    15.2 min  progress rate mean  33.97 max  36.00 m/s over 9 circuits, stints survived  53% at noise act 0.100 obs 0.000  (prep 3 s, driving 24 s)
+gen   27    15.7 min  progress rate mean  41.88 max  46.41 m/s over 9 circuits, stints survived  50% at noise act 0.100 obs 0.000  (prep 3 s, driving 24 s)
+gen   28    16.0 min  progress rate mean  32.21 max  34.76 m/s over 9 circuits, stints survived  43% at noise act 0.100 obs 0.000  (prep 2 s, driving 18 s)
+gen   29    16.5 min  progress rate mean  36.34 max  38.83 m/s over 9 circuits, stints survived  50% at noise act 0.100 obs 0.000  (prep 3 s, driving 25 s)
+gen   30    16.9 min  progress rate mean  33.25 max  36.91 m/s over 9 circuits, stints survived  45% at noise act 0.100 obs 0.000  (prep 2 s, driving 23 s)
+   held out (gen 30): g900000 1:14.97  g900001 1:03.48  g900002 0/5 (29%)  g900004 1:24.12  g900005 0:57.90  g900006 0/5 (14%)  g900007 1:23.68  g900008 1:05.03  austin 1:59.62  montreal 3/5 (96%)  monza 0/5 (16%)  spa 0/5 (18%)  spielberg 1:17.35  | with error 0.06: 33/65 (65%)  | completed 74.9%, laps finished 43/65
+gen   31    17.8 min  progress rate mean  36.81 max  39.05 m/s over 9 circuits, stints survived  69% at noise act 0.100 obs 0.000  (prep 2 s, driving 23 s)
+gen   32    18.3 min  progress rate mean  32.54 max  35.21 m/s over 9 circuits, stints survived  38% at noise act 0.100 obs 0.000  (prep 3 s, driving 26 s)
+gen   33    18.8 min  progress rate mean  35.52 max  38.37 m/s over 9 circuits, stints survived  50% at noise act 0.100 obs 0.000  (prep 2 s, driving 24 s)
+gen   34    19.2 min  progress rate mean  35.92 max  38.69 m/s over 9 circuits, stints survived  48% at noise act 0.100 obs 0.000  (prep 3 s, driving 22 s)
+gen   35    19.5 min  progress rate mean  31.24 max  34.63 m/s over 9 circuits, stints survived  34% at noise act 0.100 obs 0.000  (prep 3 s, driving 18 s)
+   held out (gen 35): g900000 1:15.37  g900001 1:04.02  g900002 0/5 (29%)  g900004 1:24.48  g900005 0:58.48  g900006 0/5 (14%)  g900007 1:24.12  g900008 1:05.30  austin 2:00.27  montreal 3/5 (96%)  monza 0/5 (16%)  spa 0/5 (18%)  spielberg 1:17.63  | with error 0.06: 30/65 (61%)  | completed 74.9%, laps finished 43/65
+gen   36    20.4 min  progress rate mean  37.47 max  39.74 m/s over 9 circuits, stints survived  59% at noise act 0.100 obs 0.000  (prep 3 s, driving 23 s)
+gen   37    20.9 min  progress rate mean  38.25 max  40.70 m/s over 9 circuits, stints survived  68% at noise act 0.100 obs 0.000  (prep 3 s, driving 24 s)
+gen   38    21.4 min  progress rate mean  35.77 max  38.18 m/s over 9 circuits, stints survived  72% at noise act 0.100 obs 0.000  (prep 2 s, driving 29 s)
+gen   39    21.9 min  progress rate mean  38.90 max  41.74 m/s over 9 circuits, stints survived  47% at noise act 0.100 obs 0.000  (prep 3 s, driving 27 s)
+gen   40    22.3 min  progress rate mean  42.00 max  44.75 m/s over 9 circuits, stints survived  55% at noise act 0.100 obs 0.000  (prep 2 s, driving 23 s)
+   held out (gen 40): g900000 1:15.90  g900001 1:04.35  g900002 0/5 (29%)  g900004 1:25.17  g900005 0:58.68  g900006 0/5 (14%)  g900007 1:24.88  g900008 1:05.62  austin 2:01.33  montreal 1:28.05  monza 0/5 (16%)  spa 4/5 (84%)  spielberg 1:17.63  | with error 0.06: 35/65 (66%)  | completed 80.2%, laps finished 49/65
+gen   41    23.3 min  progress rate mean  39.53 max  42.61 m/s over 9 circuits, stints survived  65% at noise act 0.100 obs 0.000  (prep 3 s, driving 25 s)
+gen   42    23.7 min  progress rate mean  39.30 max  41.37 m/s over 9 circuits, stints survived  70% at noise act 0.100 obs 0.000  (prep 3 s, driving 25 s)
+gen   43    24.2 min  progress rate mean  38.19 max  40.90 m/s over 9 circuits, stints survived  57% at noise act 0.100 obs 0.000  (prep 3 s, driving 24 s)
+gen   44    24.7 min  progress rate mean  38.64 max  41.98 m/s over 9 circuits, stints survived  63% at noise act 0.100 obs 0.000  (prep 3 s, driving 32 s)
+gen   45    25.1 min  progress rate mean  30.73 max  33.37 m/s over 9 circuits, stints survived  49% at noise act 0.100 obs 0.000  (prep 3 s, driving 17 s)
+   held out (gen 45): g900000 1:16.20  g900001 1:04.43  g900002 0/5 (29%)  g900004 1:25.25  g900005 0:58.70  g900006 3/5 (66%)  g900007 1:24.83  g900008 1:05.68  austin 2:01.50  montreal 1:27.67  monza 0/5 (25%)  spa 1:58.77  spielberg 1:17.85  | with error 0.06: 33/65 (65%)  | completed 86.1%, laps finished 53/65
+gen   46    26.1 min  progress rate mean  40.06 max  42.75 m/s over 9 circuits, stints survived  66% at noise act 0.100 obs 0.000  (prep 3 s, driving 30 s)
+gen   47    26.6 min  progress rate mean  35.30 max  38.57 m/s over 9 circuits, stints survived  57% at noise act 0.100 obs 0.000  (prep 2 s, driving 26 s)
+gen   48    27.1 min  progress rate mean  38.52 max  40.98 m/s over 9 circuits, stints survived  66% at noise act 0.100 obs 0.000  (prep 3 s, driving 31 s)
+gen   49    27.5 min  progress rate mean  31.60 max  34.31 m/s over 9 circuits, stints survived  44% at noise act 0.100 obs 0.000  (prep 2 s, driving 20 s)
+gen   50    27.9 min  progress rate mean  39.81 max  42.12 m/s over 9 circuits, stints survived  40% at noise act 0.100 obs 0.000  (prep 2 s, driving 22 s)
+   held out (gen 50): g900000 1:16.27  g900001 1:04.47  g900002 0/5 (28%)  g900004 1:25.20  g900005 0:58.72  g900006 4/5 (83%)  g900007 1:24.80  g900008 1:05.77  austin 2:01.57  montreal 1:27.78  monza 0/5 (29%)  spa 1:58.87  spielberg 1:17.93  | with error 0.06: 30/65 (63%)  | completed 87.7%, laps finished 54/65
+gen   51    28.8 min  progress rate mean  39.76 max  43.58 m/s over 9 circuits, stints survived  67% at noise act 0.100 obs 0.000  (prep 3 s, driving 24 s)
+gen   52    29.3 min  progress rate mean  39.15 max  41.02 m/s over 9 circuits, stints survived  75% at noise act 0.100 obs 0.000  (prep 3 s, driving 25 s)
+gen   53    29.8 min  progress rate mean  41.69 max  44.24 m/s over 9 circuits, stints survived  69% at noise act 0.100 obs 0.000  (prep 3 s, driving 27 s)
+gen   54    30.3 min  progress rate mean  38.63 max  40.87 m/s over 9 circuits, stints survived  74% at noise act 0.100 obs 0.000  (prep 3 s, driving 28 s)
+gen   55    30.8 min  progress rate mean  37.40 max  40.24 m/s over 9 circuits, stints survived  60% at noise act 0.100 obs 0.000  (prep 3 s, driving 29 s)
+   held out (gen 55): g900000 1:15.98  g900001 1:04.23  g900002 0/5 (28%)  g900004 1:24.83  g900005 0:58.52  g900006 1:01.00 3/5  g900007 1:24.58  g900008 1:05.55  austin 2:01.05  montreal 1:27.40  monza 0/5 (16%)  spa 0/5 (17%)  spielberg 1:17.90  | with error 0.06: 39/65 (71%)  | completed 79.0%, laps finished 48/65
+gen   56    31.8 min  progress rate mean  34.34 max  36.09 m/s over 9 circuits, stints survived  53% at noise act 0.100 obs 0.000  (prep 3 s, driving 27 s)
+gen   57    32.3 min  progress rate mean  35.98 max  38.58 m/s over 9 circuits, stints survived  59% at noise act 0.100 obs 0.000  (prep 2 s, driving 27 s)
+gen   58    32.8 min  progress rate mean  41.90 max  44.37 m/s over 9 circuits, stints survived  76% at noise act 0.100 obs 0.000  (prep 3 s, driving 30 s)
+gen   59    33.4 min  progress rate mean  36.18 max  37.97 m/s over 9 circuits, stints survived  79% at noise act 0.100 obs 0.000  (prep 3 s, driving 30 s)
+gen   60    33.9 min  progress rate mean  37.71 max  40.75 m/s over 9 circuits, stints survived  58% at noise act 0.100 obs 0.000  (prep 3 s, driving 31 s)
+   held out (gen 60): g900000 1:15.88  g900001 1:04.03  g900002 0/5 (28%)  g900004 1:24.53  g900005 0:58.35  g900006 4/5 (83%)  g900007 1:24.47  g900008 1:05.48  austin 1:59.93  montreal 2/5 (94%)  monza 0/5 (29%)  spa 0/5 (17%)  spielberg 1:17.92  | with error 0.06: 32/65 (64%)  | completed 80.9%, laps finished 46/65
+gen   61    34.9 min  progress rate mean  37.44 max  39.83 m/s over 9 circuits, stints survived  65% at noise act 0.100 obs 0.000  (prep 3 s, driving 29 s)
+gen   62    35.2 min  progress rate mean  34.46 max  37.04 m/s over 9 circuits, stints survived  52% at noise act 0.100 obs 0.000  (prep 3 s, driving 20 s)
+gen   63    35.6 min  progress rate mean  35.51 max  38.61 m/s over 9 circuits, stints survived  67% at noise act 0.100 obs 0.000  (prep 3 s, driving 21 s)
+gen   64    36.1 min  progress rate mean  34.73 max  38.02 m/s over 9 circuits, stints survived  51% at noise act 0.100 obs 0.000  (prep 3 s, driving 26 s)
+gen   65    36.5 min  progress rate mean  33.64 max  37.24 m/s over 9 circuits, stints survived  46% at noise act 0.100 obs 0.000  (prep 2 s, driving 22 s)
+   held out (gen 65): g900000 1:16.13  g900001 1:04.15  g900002 0/5 (28%)  g900004 1:24.67  g900005 0:58.47  g900006 1:01.02  g900007 1:24.60  g900008 1:05.60  austin 2:00.35  montreal 2/5 (94%)  monza 0/5 (33%)  spa 0/5 (17%)  spielberg 1:18.02  | with error 0.06: 29/65 (62%)  | completed 82.6%, laps finished 47/65
+gen   66    37.4 min  progress rate mean  39.36 max  43.12 m/s over 9 circuits, stints survived  63% at noise act 0.100 obs 0.000  (prep 3 s, driving 23 s)
+gen   67    37.8 min  progress rate mean  37.21 max  41.08 m/s over 9 circuits, stints survived  60% at noise act 0.100 obs 0.000  (prep 2 s, driving 27 s)
+gen   68    38.4 min  progress rate mean  37.72 max  40.01 m/s over 9 circuits, stints survived  64% at noise act 0.100 obs 0.000  (prep 3 s, driving 30 s)
+gen   69    38.8 min  progress rate mean  39.41 max  42.06 m/s over 9 circuits, stints survived  54% at noise act 0.100 obs 0.000  (prep 2 s, driving 19 s)
+gen   70    39.3 min  progress rate mean  42.64 max  45.27 m/s over 9 circuits, stints survived  55% at noise act 0.100 obs 0.000  (prep 3 s, driving 28 s)
+   held out (gen 70): g900000 1:16.68  g900001 1:04.47  g900002 0/5 (28%)  g900004 1:25.48  g900005 0:58.93  g900006 3/5 (66%)  g900007 1:25.30  g900008 1:06.15  austin 2:01.87  montreal 1:28.38  monza 0/5 (29%)  spa 0/5 (17%)  spielberg 1:18.68  | with error 0.06: 40/65 (73%)  | completed 80.0%, laps finished 48/65
+gen   71    40.1 min  progress rate mean  32.66 max  35.12 m/s over 9 circuits, stints survived  46% at noise act 0.100 obs 0.000  (prep 3 s, driving 23 s)
+gen   72    40.6 min  progress rate mean  38.26 max  40.39 m/s over 9 circuits, stints survived  76% at noise act 0.100 obs 0.000  (prep 2 s, driving 24 s)
+gen   73    41.1 min  progress rate mean  37.77 max  40.78 m/s over 9 circuits, stints survived  74% at noise act 0.100 obs 0.000  (prep 3 s, driving 27 s)
+gen   74    41.5 min  progress rate mean  44.00 max  46.48 m/s over 9 circuits, stints survived  69% at noise act 0.100 obs 0.000  (prep 2 s, driving 24 s)
+gen   75    42.0 min  progress rate mean  36.63 max  38.66 m/s over 9 circuits, stints survived  70% at noise act 0.100 obs 0.000  (prep 3 s, driving 26 s)
+   held out (gen 75): g900000 1:16.98  g900001 1:04.40  g900002 0/5 (28%)  g900004 1:25.77  g900005 0:59.12  g900006 1/5 (31%)  g900007 1:25.53  g900008 1:06.35  austin 2:02.63  montreal 3/5 (96%)  monza 2/5 (63%)  spa 0/5 (17%)  spielberg 1:18.30  | with error 0.06: 38/65 (71%)  | completed 79.7%, laps finished 46/65
+gen   76    43.1 min  progress rate mean  44.35 max  46.27 m/s over 9 circuits, stints survived  65% at noise act 0.100 obs 0.000  (prep 2 s, driving 29 s)
+gen   77    43.6 min  progress rate mean  37.94 max  41.49 m/s over 9 circuits, stints survived  61% at noise act 0.100 obs 0.000  (prep 3 s, driving 30 s)
+gen   78    44.1 min  progress rate mean  32.49 max  34.83 m/s over 9 circuits, stints survived  57% at noise act 0.100 obs 0.000  (prep 3 s, driving 28 s)
+gen   79    44.6 min  progress rate mean  39.56 max  42.11 m/s over 9 circuits, stints survived  67% at noise act 0.100 obs 0.000  (prep 3 s, driving 29 s)
+gen   80    45.1 min  progress rate mean  37.34 max  38.74 m/s over 9 circuits, stints survived  73% at noise act 0.100 obs 0.000  (prep 3 s, driving 26 s)
+   held out (gen 80): g900000 1:16.48  g900001 1:04.22  g900002 0/5 (28%)  g900004 1:25.22  g900005 0:58.82  g900006 1/5 (31%)  g900007 1:25.10  g900008 1:06.10  austin 2:01.87  montreal 2/5 (94%)  monza 0/5 (29%)  spa 0/5 (17%)  spielberg 1:18.20  | with error 0.06: 39/65 (73%)  | completed 76.9%, laps finished 43/65
+
+Best held-out: 88 laps, completion 89.5%: /Users/rraj/Documents/my_work/fevo/fevo-racer1/winners/general-solo6-mix2.json
