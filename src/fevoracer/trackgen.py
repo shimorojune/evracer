@@ -110,19 +110,27 @@ def _fillet(poly: np.ndarray, radii: np.ndarray) -> np.ndarray:
     return _resample(np.array(pts), 1.0)  # the straights are the gaps between consecutive arcs
 
 
-def _slow_features(poly: np.ndarray, rng: np.random.Generator, mix: bool = False) -> tuple[np.ndarray, np.ndarray]:
+def _slow_features(poly: np.ndarray, rng: np.random.Generator, mix: bool = False,
+                   chic: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """Corners a racing line cannot straighten, as real circuits have: on long sides, a hairpin of 150-172 degrees
     at the tip of a spike (with a near-90-degree corner either side of it) and a sidestep (two tight 90-degree corners
     the other way round, like a first-corner chicane). Returns the new polygon and fixed radii (nan: random).
 
     mix adds what the general driver met on real circuits and never in training: a sidestep chicane at the end of a
     long straight, a fast S-kink taken flat (Eau Rouge), and compound corners braked for in two stages (a fast
-    first part, a short plateau, then a tight second part)."""
+    first part, a short plateau, then a tight second part).
+
+    chic (with mix) puts a tight, narrow sidestep (15-28 m across over 15-35 m, 14-18 m radii) at the very end of the longest side:
+    a first-chicane stop from top speed, like the end of a long straight on a real circuit."""
     n = len(poly)
     area = 0.5 * float(np.sum(poly[:, 0] * np.roll(poly[:, 1], -1) - np.roll(poly[:, 0], -1) * poly[:, 1]))
     orient = 1.0 if area > 0 else -1.0
     sides = np.linalg.norm(np.roll(poly, -1, 0) - poly, axis=1)
     long_ = [int(i) for i in rng.permutation(n) if sides[i] > 350]
+    tight: set[int] = set()
+    if chic:
+        tight = {int(np.argmax(sides))}
+        long_ = [i for i in long_ if i not in tight]
     spikes = set(long_[: int(rng.integers(1, 3))])
     steps = set(long_[len(spikes): len(spikes) + int(rng.random() < 0.6)])
     kinks: set[int] = set()
@@ -155,6 +163,11 @@ def _slow_features(poly: np.ndarray, rng: np.random.Generator, mix: bool = False
             for q in range(3):
                 out.append(a + e * (u0 + q * gap) + out_n * sgn * (-1) ** q * rng.uniform(6, 14))
                 fixed.append(rng.uniform(90, 200))
+        elif i in tight:
+            base = a + e * rng.uniform(0.86, 0.94)
+            off = out_n * rng.uniform(15, 28) * (1 if rng.random() < 0.5 else -1)
+            out += [base, base + eh * rng.uniform(15, 35) + off]
+            fixed += [rng.uniform(14, 18), rng.uniform(14, 18)]
         elif i in steps or i in late_steps:
             base = a + e * (rng.uniform(0.7, 0.85) if i in late_steps else rng.uniform(0.3, 0.6))
             off = out_n * rng.uniform(30, 42) * (1 if rng.random() < 0.5 else -1)
@@ -192,7 +205,7 @@ def _compound(poly: np.ndarray, fixed: np.ndarray, rng: np.random.Generator) -> 
 
 
 def generate(seed: int, length=(3500.0, 6000.0), min_radius: float = 14.0, clearance: float = 20.0,
-             slow: bool = False, mix: bool = False) -> dict | None:
+             slow: bool = False, mix: bool = False, chic: bool = False) -> dict | None:
     """One circuit, or None when the attempt fails a check (callers retry with another seed).
 
     slow adds hairpins and sidestep chicanes (_slow_features); without it the generator is unchanged."""
@@ -218,8 +231,11 @@ def generate(seed: int, length=(3500.0, 6000.0), min_radius: float = 14.0, clear
     poly *= rng.uniform(*length) / np.linalg.norm(np.roll(poly, -1, 0) - poly, axis=1).sum()
     # Corner radii: about a quarter slow (hairpins, tight corners), half medium, the rest fast sweepers.
     fixed = None
-    if slow or mix:
-        poly, fixed = _slow_features(poly, np.random.default_rng([seed, 7]), mix=mix)
+    if chic:
+        # Longer circuits, so the longest side is a real straight (top speed before the chicane).
+        poly *= rng.uniform(1.15, 1.4)
+    if slow or mix or chic:
+        poly, fixed = _slow_features(poly, np.random.default_rng([seed, 7]), mix=mix or chic, chic=chic)
     radii = np.exp(rng.uniform(np.log(15), np.log(320), len(poly)))
     if fixed is not None:
         radii = np.where(np.isnan(fixed), radii, fixed)
@@ -266,8 +282,8 @@ def generate(seed: int, length=(3500.0, 6000.0), min_radius: float = 14.0, clear
     gates = [round(i * n / gate_count) for i in range(gate_count)]
     r = lambda v: [round(float(x), 3) for x in v]  # noqa: E731
     body = {
-        "schema": 1, "circuitId": f"{'mix' if mix else 'slow' if slow else 'gen'}-{seed}", "revision": 1,
-        "source": {"kind": "generated", "seed": seed, "generator": "fevoracer.trackgen", **({"mix": True} if mix else {"slow": True} if slow else {})},
+        "schema": 1, "circuitId": f"{'chic' if chic else 'mix' if mix else 'slow' if slow else 'gen'}-{seed}", "revision": 1,
+        "source": {"kind": "generated", "seed": seed, "generator": "fevoracer.trackgen", **({"chic": True} if chic else {"mix": True} if mix else {"slow": True} if slow else {})},
         "officialLengthM": round(length_m), "lengthM": round(length_m, 3), "spacingM": round(length_m / n, 3),
         "centerline": r(p.ravel()), "widthLeft": r(wl), "widthRight": r(wr), "gates": gates,
         "bounds": {"minX": round(float((p[:, 0] - 8).min()), 3), "minY": round(float((p[:, 1] - 8).min()), 3),

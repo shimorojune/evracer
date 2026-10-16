@@ -1,34 +1,36 @@
-# Training handoff (2026-10-15)
+# Training handoff (updated 2026-10-16)
 
-Where the driver-training work stands, for the next thread. Nothing is running.
+Driver training is **frozen**. Rohit chose "Build the site" as fevo's main goal (2026-10-16); the driver below is the
+house entry. Nothing is running. Don't start new training directions without Rohit asking.
 
-## solo-6 (short memory): built and proven, not trained
+## House driver (frozen)
 
-- fevo commit `e7948c1` (simulator 1.5.0): rules solo-6 = solo-5 + 6 inputs (39 in all): `prev_steer`,
-  `prev_throttle` (last step's applied action), `d_speed`, `d_yaw_rate`, `d_offset`, `d_heading` (change over the last
-  0.1 s). All zero after every reset. Design: `proposals/solo6-memory.md`. Logged in fevo `docs/decisions.md`.
-- Proof: all fevo tests and typechecks pass (new tests: memory inputs zero after a reset, last applied action,
-  0.1 s change, extended part unchanged; solo-6 rules test). solo-1 to solo-5: all 306 winner laps bit-identical
-  (`logs/hashes-post-agentfast.json` vs `logs/hashes-post-solo6.json`). Parity fixture: 39 earlier cases unchanged,
-  6 solo-6 cases added. SDK reports 1.5.0 with rules solo-1 to solo-6; `fevo.from_json` infers 39-input MLPs.
-- Not done yet: any training, evaluation, or notebook-lab support for solo-6.
+`winners/house-driver-solo6.json` (= `general-solo6-pace2`), rules **solo-6** (39 inputs, simulator 1.5.0).
 
-## Next steps (Rohit approved "Build solo-6" at 19:18 UTC)
+- Held-out (13 unseen tracks x 5 laps): **55/65 clean**, 45 at 3% action error, 37 at 6%, 12 at 10%
+  (`FEVO_RULES=solo-6 python -m fevoracer.robust_check`, drifting steering/pedal error, 3 seeds).
+- Pace vs expert where it laps: +3-6% on generated tracks, Spielberg +6%, Spa +8%, Montreal +9%, Austin +12%.
+- Fails: Monza (first chicane: does not move to the far edge before turn-in, misses the second apex) and g900006.
+- Comparison: solo-5 best general-solo4-es 26/15/4/1.
+- Practice from the predecessor r4 on the 7 test tracks: all 3/3 within 24-123 laps (`winners/practice-solo6-r4/`).
 
-1. Widen the best general driver (`winners/general-solo4-es.json`, 33 inputs) to 39 with zero weights for the six new
-   inputs (first-layer rows are [out][in]; see `explore.widen`). Verify it drives identically on solo-6 to solo-5
-   (same lap hashes on the held-out set) before training.
-2. Retrain on solo-6 (`FEVO_RULES=solo-6`): DAgger (`general.py`) with action noise during data collection and dropout
-   on the two `prev_*` inputs while fitting (guards against copycat learning), then ES (`general_es.py`).
-   `general.MASKED` (lap progress inputs 12 and 32) must stay masked; check the indices by name for 39 inputs.
-3. Evaluate on the same 13 held-out tracks x 5 laps (`python -m fevoracer.rescore`, laps finished first) against
-   solo-5's best: general-solo4-es, 26/65 laps, 59.7%. Practice-curve comparison on a few test tracks
-   (`practice2 --unlock 2 --focus-pairs 16 --stints 4 --stint 600`, compare with `winners/practice-solo5/`).
-4. If there is no gain, shelve solo-6 and say so plainly.
-5. Add solo-6 to `notebook-lab.html` (`notebook_lab.SWITCH`, page boot sets the observation set from rules; needs
-   39-input drivers, so only once widened drivers exist; check JS vs Python parity on every track).
+## How it was made (solo-6, 2026-10-15/16)
 
-## Results so far (solo-5, the loophole-free physics; training defaults to solo-5 via `general.RULES` / `FEVO_RULES`)
+1. Widened general-solo4-es to 39 inputs, zero weights: bit-identical on solo-6 (`widen_check.py`).
+2. DAgger with action noise 0.05 and prev_* dropout 0.3: `general-solo6` 30/65.
+3. ES: `general-solo6-es` 45/65 but brittle (24 at 3% error).
+4. Robustness ES (`general_es --lap-noise --robust-select`), then `--mix-tracks 3` (late chicanes, fast kinks; fixed
+   Spa's top-speed drift and Montreal's last chicane), then errors up to 10%: `general-solo6-r4` 54/48/36/13.
+5. Pace: `--lap-both --act-noise 0.06 --robust-select 0.06 --pace-select` (lap driven clean and with error; fastest
+   net above the start's robustness floor): `general-solo6-pace2`. Lighter noise alone was fast but brittle.
+6. Monza attempts, both failed: `chic:` generated circuits (tight 15-28 m chicane at the end of the longest straight,
+   `trackgen.generate(chic=True)`; the house driver fails most of them too). ES 80 gens on them: Monza unchanged,
+   nothing above the floor. DAgger 8 rounds (`--chic-share 0.4`): collapsed to 5-15 clean laps, Monza unchanged
+   (one early averaged net got 48% round Monza). Logs: `general-solo6-chic.log`, `general-solo6-chicd.log`.
+
+ES and DAgger now save every scored network in `checkpoints/` (`<name>-genNN.json`, `<name>-rN-new|avg.json`).
+
+## Earlier results (solo-5; training still defaults to solo-5 via `general.RULES` / `FEVO_RULES`, use FEVO_RULES=solo-6)
 
 - Best general driver: `general-solo4-es`, 26/65 held-out laps, 59.7% (solo-4: 27, 60.7%).
 - Practice, 7 unseen test tracks, all 3/3 after 2000 laps: Spielberg 1:12.52 (+1.9% vs expert), g900001 1:02.85,
@@ -38,7 +40,7 @@ Where the driver-training work stands, for the next thread. Nothing is running.
 - Speed: agent evaluation 4.1x faster (173 -> 42 us/step, fevo `9bf0702`), bit-identical; a 2000-lap practice
   run 34.3 -> 5.6 min with byte-identical checkpoints. Distillation practises hardest tracks first.
 
-## Commits today
+## Commits (2026-10-15; solo-6 training commits since are in `git log`)
 
 fevo (local, NOT pushed; all await Rohit's push): `e7948c1` solo-6, `9bf0702` evaluator speed-up, `f0b5666` solo-5,
 plus earlier unpushed ones: `bbfc122`, `4dee9f4`, `e164193`, `63b352b`, `2b3f3a1`, `fc500e1`, `8ab1ff1`, `70be396`,
@@ -55,7 +57,7 @@ laps-first winners, earlier ES/generator/expert commits (`eea4f40` ... `e7f1fee`
 ## Key files (fevo-racer1)
 
 - Training: `src/fevoracer/general.py` (DAgger, `RULES`, held-out set), `general_es.py` (ES, noise curriculum),
-  `distill.py`, `practice.py` / `practice2.py` (practice: survival, focused survival, pace), `rescore.py`.
+  `distill.py`, `robust_check.py`, `widen_check.py`, `practice.py` / `practice2.py` (practice: survival, focused survival, pace), `rescore.py`.
 - Notebook: `notebook2.py` (current rules), `notebook_lab.py` + `notebook_lab.html` -> `notebook-lab.html`,
   `notebook_replay.py` (replays exported laps exactly), `notebook_drag_check.py`.
 - Checks: `hashes.py` (bit-identical proof of older rules versions), `loophole_scan.py`, `retime.py --wasm`,
@@ -63,13 +65,11 @@ laps-first winners, earlier ES/generator/expert commits (`eea4f40` ... `e7f1fee`
 - Proposals: `proposals/solo6-memory.md`, `proposals/solo5-blend-fix.diff`.
 - Logs: `logs/` (distill*.log, practice-solo5.log, notebook-solo5.log, loophole_scan.log, retime-fix.log, hashes-*).
 
-## Open questions for Rohit
+## Open items (parked)
 
-- Push the 15 fevo commits (solo-2 to solo-6, replay viewer, evaluator speed-up)?
-- After solo-6: whether to try better distillation (teacher weighting, student noise, bigger student) or a
-  training-only GPU sim (exact-sim re-check of every result).
-- Notebook practice still crashes about 1 lap in 4; whether to make notes trainable inside the network (a later
-  rules item).
+- Push the 15 fevo commits (solo-2 to solo-6, replay viewer, evaluator speed-up): Rohit's to push.
+- If training resumes: Monza-type chicanes (maybe a bigger network or line-aware inputs), solo-6 in the notebook lab,
+  pace closer to the expert.
 
 ## Conventions
 

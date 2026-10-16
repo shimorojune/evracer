@@ -85,11 +85,11 @@ def _init(setup: list[float], no_ramp: bool = False) -> None:
 def _track(spec: str) -> fevo.Track:
     """gen:<seed> (slow:<seed>, with hairpins and sidestep chicanes) is the first valid generated circuit at or after
     that seed (some seeds fail a check)."""
-    if not spec.startswith(("gen:", "slow:", "mix:")):
+    if not spec.startswith(("gen:", "slow:", "mix:", "chic:")):
         return realtracks.load(spec)
     kind, s = spec.split(":")
     s = int(s)
-    while (t := trackgen.generate(s, slow=kind == "slow", mix=kind == "mix")) is None:
+    while (t := trackgen.generate(s, slow=kind == "slow", mix=kind == "mix", chic=kind == "chic")) is None:
         s += 1
     return trackgen.track(t)
 
@@ -265,7 +265,8 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
           steps: int, lr: float, workers: int | None, seed: int, setup_from: str, init: str | None = None,
           start_round: int = 0, brake_weight: float = 1.0, brake_starts: float = 0.0, expert_share: float = 0.0,
           seed_rounds: int = 0, data: str | None = None, slow_share: float = 0.0, data_last: int = 0,
-          mix_share: float = 0.0, no_ramp: bool = False, act_noise: float = 0.0, prev_dropout: float = 0.0) -> None:
+          mix_share: float = 0.0, no_ramp: bool = False, act_noise: float = 0.0, prev_dropout: float = 0.0,
+          chic_share: float = 0.0) -> None:
     if no_ramp:
         EXPERT.pop("onset_ramp", None)
         CAUTIOUS.pop("onset_ramp", None)
@@ -318,7 +319,9 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
             # starts with), then the usual schedule takes over.
             beta = 1.0 if r == 0 or r - start_round < seed_rounds else max(0.0, 0.6 - 0.1 * (r - seed_rounds))
             n_slow, n_mix = int(round(slow_share * gen_per_round)), int(round(mix_share * gen_per_round))
-            specs = ([f"gen:{int(s)}" for s in rng.integers(1, 800_000, gen_per_round - n_slow - n_mix)]
+            n_chic = int(round(chic_share * gen_per_round))
+            specs = ([f"gen:{int(s)}" for s in rng.integers(1, 800_000, gen_per_round - n_slow - n_mix - n_chic)]
+                     + [f"chic:{int(s)}" for s in rng.integers(1, 800_000, n_chic)]
                      + [f"slow:{int(s)}" for s in rng.integers(1, 800_000, n_slow)]
                      + [f"mix:{int(s)}" for s in rng.integers(1, 800_000, n_mix)]
                      + list(rng.choice(real_train, real_per_round, replace=False)))
@@ -351,6 +354,7 @@ def train(name: str, rounds: int, gen_per_round: int, real_per_round: int, pract
                     e["expert"] = expert_laps[e["track"]]
                 line, score, fin, total = summarise(ev)
                 mark = ""
+                (CHECKPOINTS / f"{name}-r{r}-{label}.json").write_text(json.dumps(mlp) + "\n")
                 # Laps finished on the held-out tracks first, mean completion as the tiebreak.
                 if (fin, score) > best:
                     best = (fin, score)
@@ -387,12 +391,13 @@ def main() -> None:
     ap.add_argument("--data-last", type=int, default=0, help="with --data, keep only the most recent N states")
     ap.add_argument("--data", help="start with the kept states a previous run saved (checkpoints/<name>-data.npz)")
     ap.add_argument("--act-noise", type=float, default=0.0, help="drifting error on the applied action while collecting data")
+    ap.add_argument("--chic-share", type=float, default=0.0, help="share of the generated circuits with a tight chicane after the longest straight")
     ap.add_argument("--prev-dropout", type=float, default=0.0, help="share of fitted states with the prev_* inputs zeroed (solo-6)")
     ap.add_argument("-w", "--workers", type=int)
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     train(a.name, a.rounds, a.gen, a.real, a.practice, a.stint, [int(h) for h in a.hidden.split(",")], a.steps, a.lr,
-          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds, a.data, a.slow_share, a.data_last, a.mix_share, a.no_ramp, a.act_noise, a.prev_dropout)
+          a.workers, a.seed, a.setup_from, a.init, a.start_round, a.brake_weight, a.brake_starts, a.expert_share, a.seed_rounds, a.data, a.slow_share, a.data_last, a.mix_share, a.no_ramp, a.act_noise, a.prev_dropout, a.chic_share)
 
 
 if __name__ == "__main__":

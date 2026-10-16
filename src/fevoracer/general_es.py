@@ -125,7 +125,7 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
         real_tracks: int, stints: int, stint: int, crash_s: float, eval_every: int, chunk: int, workers: int | None,
         seed: int, fresh: bool, mix_tracks: int = 0, act_noise: float = 0.0, obs_noise: float = 0.0,
         noise_max: float = 0.1, noise_up: float = 1.2, survive: float = 0.8, lap_noise: int = 0,
-        robust_select: float = 0.0, pace_select: bool = False) -> None:
+        robust_select: float = 0.0, pace_select: bool = False, chic_tracks: int = 0) -> None:
     rng = np.random.default_rng(seed)
     base = json.load(open(init))
     setup_d = base.get("setup")
@@ -214,6 +214,7 @@ def run(init: str, name: str, generations: int, pairs: int, sigma: float, lr: fl
             specs = ([f"gen:{int(s)}" for s in rng.integers(1, 800_000, gen_tracks)]
                      + [f"slow:{int(s)}" for s in rng.integers(1, 800_000, slow_tracks)]
                      + [f"mix:{int(s)}" for s in rng.integers(1, 800_000, mix_tracks)]
+                     + [f"chic:{int(s)}" for s in rng.integers(1, 800_000, chic_tracks)]
                      + list(rng.choice(real_train, real_tracks, replace=False)))
             tg = time.time()
             prep = pool.map(_prep, specs)
@@ -295,6 +296,7 @@ def main() -> None:
     ap.add_argument("--lap-noise", action="store_true", help="drive the official-start lap with the stint action error too")
     ap.add_argument("--lap-both", action="store_true", help="drive the official-start lap twice: clean and with the stint action error")
     ap.add_argument("--robust-select", type=float, default=0.0, help="pick the held-out best by clean laps + laps under this action error")
+    ap.add_argument("--chic-tracks", type=int, default=0, help="circuits with a tight chicane at the end of the longest straight")
     ap.add_argument("--pace-select", action="store_true", help="with --robust-select: pick the fastest network that keeps the start's robustness")
     ap.add_argument("--chunk", type=int, default=8, help="candidates per task")
     ap.add_argument("-w", "--workers", type=int)
@@ -303,7 +305,7 @@ def main() -> None:
     a = ap.parse_args()
     run(a.init, a.name, a.generations, a.pairs, a.sigma, a.lr, a.gen_tracks, a.slow_tracks, a.real_tracks, a.stints,
         a.stint, a.crash_s, a.eval_every, a.chunk, a.workers, a.seed, a.fresh, a.mix_tracks,
-        a.act_noise, a.obs_noise, a.noise_max, a.noise_up, a.survive, 2 if a.lap_both else int(a.lap_noise), a.robust_select, a.pace_select)
+        a.act_noise, a.obs_noise, a.noise_max, a.noise_up, a.survive, 2 if a.lap_both else int(a.lap_noise), a.robust_select, a.pace_select, a.chic_tracks)
 
 
 if __name__ == "__main__":
