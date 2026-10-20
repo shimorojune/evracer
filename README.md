@@ -1,14 +1,27 @@
-# fevo-racer1
+# evracer
 
-NEAT agents that learn real Formula 1 circuits on the fevo simulator, the same `sim.wasm` the fevo website scores with.
+Trains neural-network drivers (NEAT genomes and MLPs) for real Formula 1 circuits on the fevo simulator, the same `sim.wasm` the fevo dashboard runs. The Python package is `fevoracer`.
 
-Setup (needs the fevo monorepo next door at `../fevo`):
+**Current state:** training is frozen. The house driver is `winners/house-driver-solo6.json` (rules solo-6). [HANDOFF-training.md](HANDOFF-training.md) has its results, how it was made and what to try if training resumes.
+
+## Setup
+
+Needs the [fevo](https://github.com/shimorojune/fevo) repo checked out next door at `../fevo`, because the `fevo` Python SDK is installed from `../fevo/python/fevo`.
 
 ```bash
 uv sync
 ```
 
-## Train
+## Layout
+
+- `src/fevoracer/`: trainers (`general.py` DAgger, `general_es.py` ES, `practice*.py`, `smooth.py`, `ppo.py`, ...), checks (`robust_check.py`, `hashes.py`, `loophole_scan.py`, ...) and the live training page (`watch.py`).
+- `winners/`: saved drivers. Top-level JSON files are used as car setups and starting points, so keep them.
+- `config/`: NEAT configs. `data/tumftm/`: real circuit layouts. `lines/`: racing lines.
+- Generated output (`checkpoints/`, `logs/`, `tracks/`, `*.html`) is gitignored.
+
+## Early single-track tools
+
+These came before the general driver and train on one track at a time (mostly Spielberg).
 
 **Curriculum** (learn the whole circuit at low speed, then raise the limit):
 
@@ -44,12 +57,12 @@ The page shows the latest official lap driven by the current network (looping, w
 ## Check, export, watch
 
 ```bash
-uv run benchmark-lap                         # official result, as the website will show it
-uv run export-winner -o my-agent.json        # the upload file
+uv run benchmark-lap                         # official result, as the dashboard scores it
+uv run export-winner -o my-agent.json        # agent JSON (publish to the dashboard with `fevo publish` from the fevo repo)
 uv run replay                                # replay of every winner, opens in the browser
 ```
 
-Champions are written to `winners/` (JSON upload files plus neat-python pickles); checkpoints to `checkpoints/<track>/`.
+Champions are written to `winners/` (agent JSON files); checkpoints to `checkpoints/<track>/`.
 
 ## Notes from the first runs
 
