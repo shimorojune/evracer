@@ -36,7 +36,7 @@ ES and DAgger now save every scored network in `checkpoints/` (`<name>-genNN.jso
 - Practice, 7 unseen test tracks, all 3/3 after 2000 laps: Spielberg 1:12.52 (+1.9% vs expert), g900001 1:02.85,
   g900006 1:00.67, Monza 1:34.40, Montreal 1:26.95, Spa 1:58.80, Austin 1:58.23 (+13.6%). `winners/practice-solo5/`.
 - Notebooks (v2 rules) on solo-5: modest gains over 30 laps, about 30% of practice laps crash. `winners/notebook-solo5/`.
-- Distillation on solo-5 (39 teachers): no round beat the starting driver (best 23 laps). `winners/distill-teachers-solo5/`.
+- Distillation on solo-5 (39 teachers): no round beat the starting driver (best 23 laps). Teachers removed in the repo cleanup (in git history before it).
 - Speed: agent evaluation 4.1x faster (173 -> 42 us/step, fevo `9bf0702`), bit-identical; a 2000-lap practice
   run 34.3 -> 5.6 min with byte-identical checkpoints. Distillation practises hardest tracks first.
 
@@ -62,8 +62,7 @@ laps-first winners, earlier ES/generator/expert commits (`eea4f40` ... `e7f1fee`
   `notebook_replay.py` (replays exported laps exactly), `notebook_drag_check.py`.
 - Checks: `hashes.py` (bit-identical proof of older rules versions), `loophole_scan.py`, `retime.py --wasm`,
   `scrub_check.py`, `slide_check.py`, `expert_check.py`.
-- Proposals: `proposals/solo6-memory.md`, `proposals/solo5-blend-fix.diff`.
-- Logs: `logs/` (distill*.log, practice-solo5.log, notebook-solo5.log, loophole_scan.log, retime-fix.log, hashes-*).
+- Logs, proposals, `notebook-lab.html` and older practice/distillation outputs were removed in the repo cleanup; recover them from git history (`git show c4e0333:<path>`).
 
 ## Open items (parked)
 
